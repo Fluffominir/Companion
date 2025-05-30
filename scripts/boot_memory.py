@@ -1,5 +1,6 @@
+
 import glob, os
-import PyPDF2
+import pypdf
 from openai import OpenAI
 from pinecone import Pinecone, ServerlessSpec
 
@@ -7,41 +8,52 @@ OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 INDEX_NAME = "companion-memory"
 
+if not OPENAI_API_KEY or not PINECONE_API_KEY:
+    raise ValueError("Missing required API keys")
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
+
+# Ensure index exists
 if INDEX_NAME not in [i["name"] for i in pc.list_indexes()]:
-    pc.create_index(name=INDEX_NAME, dimension=1536, metric="cosine",
-                    spec=ServerlessSpec(cloud="aws", region="us-east-1"))
+    pc.create_index(
+        name=INDEX_NAME, 
+        dimension=1536, 
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region="us-west-2")
+    )
 index = pc.Index(INDEX_NAME)
 
 def embed(text):  
-    return client.embeddings.create(
-        model="text-embedding-3-small", input=text
-    ).data[0].embedding
+    try:
+        return client.embeddings.create(
+            model="text-embedding-3-small", input=text
+        ).data[0].embedding
+    except Exception as e:
+        print(f"Embedding error: {e}")
+        return None
 
 import re
 from datetime import datetime
 
 def categorize_content(text, filename):
-    """Categorize content based on keywords and structure"""
+    """Enhanced categorization with better logic"""
     text_lower = text.lower()
     filename_lower = filename.lower()
     
-    # File-based categorization first
+    # Priority-based categorization
     if any(word in filename_lower for word in ['journal', 'diary']):
         return 'personal_journal'
-    elif any(word in filename_lower for word in ['personality', 'profile']):
+    elif any(word in filename_lower for word in ['personality', 'profile', 'michael']):
         return 'personality'
     elif any(word in filename_lower for word in ['health', 'medical', 'superbill']):
         return 'health'
-    elif any(word in filename_lower for word in ['company', 'employee', 'handbook', 'rocket']):
+    elif any(word in filename_lower for word in ['company', 'employee', 'handbook', 'rocket', 'launch']):
         return 'work'
     elif any(word in filename_lower for word in ['pitch', 'serwm', 'brand']):
         return 'projects'
-    elif any(word in filename_lower for word in ['attached', 'body', 'myth', 'steal', 'show']):
+    elif any(word in filename_lower for word in ['attached', 'body', 'myth', 'steal', 'show', 'emyth']):
         return 'books'
-    
-    # Content-based categorization
     elif any(word in text_lower for word in ['goal', 'objective', 'want to', 'plan to', 'achieve']):
         return 'goals'
     elif any(word in text_lower for word in ['meeting', 'call', 'appointment', 'schedule']):
@@ -54,92 +66,156 @@ def categorize_content(text, filename):
         return 'general'
 
 def extract_pdf_text(pdf_path):
-    """Extract text from PDF files"""
+    """Extract text using pypdf library"""
     try:
         with open(pdf_path, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
+            pdf_reader = pypdf.PdfReader(file)
             text = ""
             for page in pdf_reader.pages:
-                text += page.extract_text() + "\n"
+                try:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+                except Exception as e:
+                    print(f"Error extracting page from {pdf_path}: {e}")
+                    continue
         return text.strip()
     except Exception as e:
         print(f"Error reading PDF {pdf_path}: {e}")
         return ""
 
-def chunk_text(text, max_length=500):
-    """Split long text into smaller chunks"""
+def chunk_text(text, max_length=600):
+    """Improved text chunking with better sentence boundaries"""
     if len(text) <= max_length:
         return [text]
     
+    # Try to split on sentence boundaries first
+    sentences = re.split(r'[.!?]+', text)
     chunks = []
-    words = text.split()
-    current_chunk = []
-    current_length = 0
+    current_chunk = ""
     
-    for word in words:
-        if current_length + len(word) + 1 > max_length:
-            if current_chunk:
-                chunks.append(' '.join(current_chunk))
-                current_chunk = [word]
-                current_length = len(word)
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+            
+        if len(current_chunk) + len(sentence) + 2 <= max_length:
+            current_chunk += sentence + ". "
         else:
-            current_chunk.append(word)
-            current_length += len(word) + 1
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+            current_chunk = sentence + ". "
     
     if current_chunk:
-        chunks.append(' '.join(current_chunk))
+        chunks.append(current_chunk.strip())
     
-    return chunks
+    return chunks if chunks else [text[:max_length]]
+
+def clean_text(text):
+    """Clean and normalize text"""
+    # Remove excessive whitespace and normalize
+    text = re.sub(r'\s+', ' ', text)
+    text = text.strip()
+    return text
 
 vector_count = 0
+processed_files = []
+
+print("Starting memory synchronization...")
 
 # Process markdown files
 md_files = glob.glob("docs/**/*.md", recursive=True)
+print(f"Found {len(md_files)} markdown files")
+
 for path in md_files:
-    with open(path) as f:
-        txt = f.read()
-    
-    category = categorize_content(txt, path)
-    chunks = chunk_text(txt)
-    
-    for i, chunk in enumerate(chunks):
-        vector_id = f"{path}_{i}" if len(chunks) > 1 else path
-        metadata = {
-            "text": chunk,
-            "source": path,
-            "category": category,
-            "chunk_index": i,
-            "total_chunks": len(chunks),
-            "timestamp": datetime.now().isoformat(),
-            "file_type": "markdown"
-        }
-        index.upsert([(vector_id, embed(chunk), metadata)])
-        vector_count += 1
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            txt = f.read()
+        
+        if not txt.strip():
+            continue
+            
+        txt = clean_text(txt)
+        category = categorize_content(txt, path)
+        chunks = chunk_text(txt)
+        
+        for i, chunk in enumerate(chunks):
+            if not chunk.strip():
+                continue
+                
+            embedding = embed(chunk)
+            if embedding is None:
+                continue
+                
+            vector_id = f"{path}_{i}" if len(chunks) > 1 else path.replace('/', '_')
+            metadata = {
+                "text": chunk,
+                "source": path,
+                "category": category,
+                "chunk_index": i,
+                "total_chunks": len(chunks),
+                "timestamp": datetime.now().isoformat(),
+                "file_type": "markdown"
+            }
+            
+            index.upsert([(vector_id, embedding, metadata)])
+            vector_count += 1
+        
+        processed_files.append(path)
+        print(f"Processed: {path} ({category})")
+        
+    except Exception as e:
+        print(f"Error processing {path}: {e}")
 
 # Process PDF files
 pdf_files = glob.glob("docs/**/*.pdf", recursive=True)
+print(f"Found {len(pdf_files)} PDF files")
+
 for path in pdf_files:
-    print(f"Processing PDF: {path}")
-    txt = extract_pdf_text(path)
-    
-    if txt.strip():  # Only process if we extracted text
+    try:
+        print(f"Processing PDF: {path}")
+        txt = extract_pdf_text(path)
+        
+        if not txt.strip():
+            print(f"No text extracted from {path}")
+            continue
+            
+        txt = clean_text(txt)
         category = categorize_content(txt, path)
         chunks = chunk_text(txt, max_length=800)  # Larger chunks for PDFs
         
+        processed_chunks = 0
         for i, chunk in enumerate(chunks):
-            if chunk.strip():  # Skip empty chunks
-                vector_id = f"{path}_{i}" if len(chunks) > 1 else path
-                metadata = {
-                    "text": chunk,
-                    "source": path,
-                    "category": category,
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                    "timestamp": datetime.now().isoformat(),
-                    "file_type": "pdf"
-                }
-                index.upsert([(vector_id, embed(chunk), metadata)])
-                vector_count += 1
+            if not chunk.strip():
+                continue
+                
+            embedding = embed(chunk)
+            if embedding is None:
+                continue
+                
+            vector_id = f"{path}_{i}".replace('/', '_').replace(' ', '_')
+            metadata = {
+                "text": chunk,
+                "source": path,
+                "category": category,
+                "chunk_index": i,
+                "total_chunks": len(chunks),
+                "timestamp": datetime.now().isoformat(),
+                "file_type": "pdf"
+            }
+            
+            index.upsert([(vector_id, embedding, metadata)])
+            vector_count += 1
+            processed_chunks += 1
+        
+        processed_files.append(path)
+        print(f"Processed: {path} ({category}) - {processed_chunks} chunks")
+        
+    except Exception as e:
+        print(f"Error processing PDF {path}: {e}")
 
-total_files = len(md_files) + len(pdf_files)
-print(f"Synced {vector_count} vectors from {total_files} documents ({len(md_files)} MD, {len(pdf_files)} PDF)")
+total_files = len(processed_files)
+print(f"\nMemory sync complete!")
+print(f"Successfully processed {total_files} files")
+print(f"Created {vector_count} memory vectors")
+print(f"Categories used: {set(categorize_content('', f) for f in processed_files)}")

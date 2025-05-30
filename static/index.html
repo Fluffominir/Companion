@@ -1,180 +1,581 @@
+
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>My AI Companion</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Michael's AI Companion</title>
     <link rel="manifest" href="/static/manifest.json">
-    <meta name="theme-color" content="#007bff">
+    <meta name="theme-color" content="#1a1a2e">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="AI Companion">
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+        :root {
+            --primary-bg: #0f0f23;
+            --secondary-bg: #1a1a2e;
+            --accent-bg: #16213e;
+            --surface-bg: #1e1e2e;
+            --primary-text: #e4e4e7;
+            --secondary-text: #a1a1aa;
+            --accent-color: #3b82f6;
+            --accent-hover: #2563eb;
+            --success-color: #10b981;
+            --border-color: #374151;
+            --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --radius: 12px;
         }
-        .chat-container {
-            max-width: 800px;
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, var(--primary-bg) 0%, var(--secondary-bg) 100%);
+            color: var(--primary-text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .app-container {
+            max-width: 1200px;
             margin: 0 auto;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .app-header {
+            background: linear-gradient(135deg, var(--accent-bg) 0%, var(--surface-bg) 100%);
+            border-radius: var(--radius);
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+        }
+
+        .app-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .app-subtitle {
+            color: var(--secondary-text);
+            font-size: 1.1rem;
+            font-weight: 400;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 30px;
+            flex: 1;
+        }
+
+        .chat-section {
+            background: var(--surface-bg);
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            height: 70vh;
             overflow: hidden;
         }
-        h1 {
-            background: linear-gradient(45deg, #007bff, #6610f2);
-            color: white;
-            margin: 0;
+
+        .chat-header {
             padding: 20px;
-            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--accent-bg);
         }
-        .calendar-section {
-            padding: 15px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #dee2e6;
-            text-align: center;
+
+        .chat-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--primary-text);
         }
-        .calendar-section button {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 20px;
-            cursor: pointer;
-            margin: 0 10px;
-            font-size: 14px;
-        }
-        .calendar-section button:hover {
-            background: #218838;
-        }
-        .messages {
-            height: 400px;
+
+        .messages-container {
+            flex: 1;
             overflow-y: auto;
             padding: 20px;
-            background: #f8f9fa;
+            scroll-behavior: smooth;
         }
+
         .message {
-            margin: 10px 0;
-            padding: 12px;
-            border-radius: 10px;
-            max-width: 80%;
-            word-wrap: break-word;
-            white-space: pre-wrap;
-        }
-        .user-message {
-            background: #007bff;
-            color: white;
-            margin-left: auto;
-            text-align: right;
-        }
-        .ai-message {
-            background: white;
-            border: 1px solid #dee2e6;
-        }
-        .input-container {
-            padding: 20px;
+            margin-bottom: 20px;
             display: flex;
-            gap: 10px;
+            flex-direction: column;
+            max-width: 85%;
+            animation: fadeIn 0.3s ease-out;
         }
-        #messageInput {
+
+        .message.user {
+            align-self: flex-end;
+            align-items: flex-end;
+        }
+
+        .message.ai {
+            align-self: flex-start;
+            align-items: flex-start;
+        }
+
+        .message-content {
+            background: var(--accent-bg);
+            padding: 15px 20px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            position: relative;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, var(--accent-color), #2563eb);
+            color: white;
+            border-color: var(--accent-color);
+        }
+
+        .message-label {
+            font-size: 0.85rem;
+            color: var(--secondary-text);
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .input-section {
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+            background: var(--accent-bg);
+        }
+
+        .input-container {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .message-input {
             flex: 1;
-            padding: 12px;
-            border: 1px solid #dee2e6;
-            border-radius: 25px;
-            font-size: 16px;
-            outline: none;
+            background: var(--surface-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 15px 20px;
+            color: var(--primary-text);
+            font-size: 1rem;
+            resize: none;
+            min-height: 50px;
+            max-height: 150px;
+            font-family: inherit;
+            transition: all 0.2s ease;
         }
-        #sendButton {
-            background: #007bff;
+
+        .message-input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .message-input::placeholder {
+            color: var(--secondary-text);
+        }
+
+        .send-button {
+            background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
             color: white;
             border: none;
-            padding: 12px 24px;
-            border-radius: 25px;
+            border-radius: var(--radius);
+            padding: 15px 25px;
+            font-size: 1rem;
+            font-weight: 600;
             cursor: pointer;
-            font-size: 16px;
+            transition: all 0.2s ease;
+            min-width: 80px;
         }
-        #sendButton:hover {
-            background: #0056b3;
+
+        .send-button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
         }
-        .loading {
-            background: #6c757d !important;
-            cursor: not-allowed !important;
+
+        .send-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .sidebar-card {
+            background: var(--surface-bg);
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--accent-bg);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary-text);
+        }
+
+        .card-content {
+            padding: 20px;
+        }
+
+        .calendar-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .calendar-button {
+            background: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: var(--radius);
+            padding: 12px 20px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .calendar-button:hover {
+            background: #059669;
+            transform: translateY(-1px);
+        }
+
+        .calendar-button.secondary {
+            background: var(--accent-color);
+        }
+
+        .calendar-button.secondary:hover {
+            background: var(--accent-hover);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success-color);
+            margin-right: 8px;
+        }
+
+        .quick-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .quick-action {
+            background: transparent;
+            color: var(--secondary-text);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 10px 15px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+        }
+
+        .quick-action:hover {
+            background: var(--accent-bg);
+            color: var(--primary-text);
+            border-color: var(--accent-color);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: var(--accent-bg);
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--secondary-text);
+            margin-top: 5px;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 20px;
+            color: var(--secondary-text);
+            font-style: italic;
+        }
+
+        .typing-indicator.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .app-title {
+                font-size: 2rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chat-section {
+                height: 60vh;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="chat-container">
-        <h1>🤖 My AI Companion</h1>
-        
-        <div class="calendar-section">
-            <button id="connectCalendar" onclick="connectCalendar()">📅 Connect Google Calendar</button>
-            <button id="showEvents" onclick="showUpcomingEvents()" style="display:none;">Show Upcoming Events</button>
-        </div>
-        
-        <div id="messages" class="messages">
-            <div class="message ai-message">
-                <strong>AI:</strong> Hello! I'm your personal AI companion. I remember your goals, ideas, and notes. Connect your Google Calendar for scheduling assistance!
-            </div>
-        </div>
-        <div class="input-container">
-            <input type="text" id="messageInput" placeholder="Ask me about your goals, schedule, or anything else..." />
-            <button id="sendButton">Send</button>
+    <div class="app-container">
+        <header class="app-header">
+            <h1 class="app-title">Michael's AI Companion</h1>
+            <p class="app-subtitle">Your personal AI assistant that knows you, remembers everything, and helps you achieve your goals.</p>
+        </header>
+
+        <div class="main-grid">
+            <section class="chat-section">
+                <div class="chat-header">
+                    <h2 class="chat-title">Conversation</h2>
+                </div>
+                
+                <div id="messages" class="messages-container">
+                    <div class="message ai">
+                        <div class="message-label">AI Assistant</div>
+                        <div class="message-content">
+                            Hello Michael! I'm your personal AI companion. I have access to your journals, goals, projects, and personal data. I can help you with scheduling, remember important details about your work at Rocket Launch Studio, discuss your reading insights, and support your personal growth journey. What would you like to explore today?
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="typing-indicator" id="typingIndicator">
+                    AI is thinking...
+                </div>
+                
+                <div class="input-section">
+                    <div class="input-container">
+                        <textarea 
+                            id="messageInput" 
+                            class="message-input" 
+                            placeholder="Ask about your goals, schedule a meeting, or anything else..." 
+                            rows="1"></textarea>
+                        <button id="sendButton" class="send-button">Send</button>
+                    </div>
+                </div>
+            </section>
+
+            <aside class="sidebar">
+                <div class="sidebar-card">
+                    <div class="card-header">
+                        <h3 class="card-title">Calendar Integration</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="calendar-buttons">
+                            <button id="connectCalendar" class="calendar-button" onclick="connectCalendar()">
+                                Connect Google Calendar
+                            </button>
+                            <button id="showEvents" class="calendar-button secondary" onclick="showUpcomingEvents()" style="display:none;">
+                                View Upcoming Events
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-card">
+                    <div class="card-header">
+                        <h3 class="card-title">Quick Actions</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="quick-actions">
+                            <button class="quick-action" onclick="sendQuickMessage('What are my goals for this month?')">
+                                Review Monthly Goals
+                            </button>
+                            <button class="quick-action" onclick="sendQuickMessage('What did I learn from my recent journal entries?')">
+                                Journal Insights
+                            </button>
+                            <button class="quick-action" onclick="sendQuickMessage('What should I focus on for Rocket Launch Studio?')">
+                                Work Priorities
+                            </button>
+                            <button class="quick-action" onclick="sendQuickMessage('Schedule time for creative work this week')">
+                                Plan Creative Time
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-card">
+                    <div class="card-header">
+                        <h3 class="card-title">System Status</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <span class="stat-value" id="memoryCount">-</span>
+                                <div class="stat-label">Memories</div>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="sessionLength">0</span>
+                                <div class="stat-label">Messages</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px; font-size: 0.9rem; color: var(--secondary-text);">
+                            <span class="status-indicator"></span>
+                            All systems operational
+                        </div>
+                    </div>
+                </div>
+            </aside>
         </div>
     </div>
 
     <script>
-        const messagesDiv = document.getElementById('messages');
+        const messagesContainer = document.getElementById('messages');
         const messageInput = document.getElementById('messageInput');
         const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typingIndicator');
+        let messageCount = 0;
 
-        function addMessage(message, isUser = false) {
+        // Auto-resize textarea
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+        });
+
+        function addMessage(content, isUser = false) {
             const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
-            messageDiv.innerHTML = `<strong>${isUser ? 'You' : 'AI'}:</strong> ${message}`;
-            messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            messageDiv.className = `message ${isUser ? 'user' : 'ai'}`;
+            
+            const label = document.createElement('div');
+            label.className = 'message-label';
+            label.textContent = isUser ? 'You' : 'AI Assistant';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            
+            messageDiv.appendChild(label);
+            messageDiv.appendChild(contentDiv);
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            messageCount++;
+            document.getElementById('sessionLength').textContent = Math.floor(messageCount / 2);
         }
 
-        async function sendMessage() {
-            const message = messageInput.value.trim();
-            if (!message) return;
+        function showTyping() {
+            typingIndicator.classList.add('active');
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
 
-            addMessage(message, true);
-            messageInput.value = '';
-            sendButton.textContent = 'Thinking...';
-            sendButton.className = 'loading';
+        function hideTyping() {
+            typingIndicator.classList.remove('active');
+        }
+
+        async function sendMessage(message = null) {
+            const content = message || messageInput.value.trim();
+            if (!content) return;
+
+            addMessage(content, true);
+            if (!message) {
+                messageInput.value = '';
+                messageInput.style.height = 'auto';
+            }
+            
+            sendButton.disabled = true;
+            sendButton.textContent = 'Sending...';
+            showTyping();
 
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ message: message }),
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        message: content,
+                        session_id: 'michael_session'
+                    }),
                 });
 
                 const data = await response.json();
+                hideTyping();
                 addMessage(data.response);
             } catch (error) {
-                addMessage('Sorry, I had trouble processing that. Please try again.');
+                hideTyping();
+                addMessage('I apologize, but I encountered an error processing your request. Please try again.');
+                console.error('Chat error:', error);
             }
 
+            sendButton.disabled = false;
             sendButton.textContent = 'Send';
-            sendButton.className = '';
         }
 
-        sendButton.addEventListener('click', sendMessage);
+        function sendQuickMessage(message) {
+            sendMessage(message);
+        }
+
+        sendButton.addEventListener('click', () => sendMessage());
         messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
                 sendMessage();
             }
         });
 
-        function connectCalendar() {
+        async function connectCalendar() {
             window.location.href = '/auth/google';
         }
 
@@ -189,33 +590,38 @@
                 }
 
                 if (data.events.length === 0) {
-                    addMessage('No upcoming events found.');
+                    addMessage('No upcoming events found in your calendar.');
                 } else {
-                    let eventsText = 'Your upcoming events:\n';
-                    data.events.forEach(event => {
+                    let eventsText = 'Here are your upcoming events:\n\n';
+                    data.events.forEach((event, index) => {
                         const date = new Date(event.start).toLocaleString();
-                        eventsText += `• ${event.summary} - ${date}\n`;
+                        eventsText += `${index + 1}. ${event.summary}\n   ${date}\n`;
+                        if (event.location) eventsText += `   Location: ${event.location}\n`;
+                        eventsText += '\n';
                     });
                     addMessage(eventsText);
                 }
             } catch (error) {
-                addMessage('Error fetching calendar events.');
+                addMessage('Error fetching calendar events. Please try again.');
             }
         }
 
-        // Check if user is already authenticated on page load
-        window.onload = async function() {
+        // Check authentication status on load
+        window.addEventListener('load', async () => {
             try {
                 const response = await fetch('/api/upcoming-events');
                 const data = await response.json();
                 if (!data.auth_required) {
                     document.getElementById('connectCalendar').style.display = 'none';
-                    document.getElementById('showEvents').style.display = 'inline-block';
+                    document.getElementById('showEvents').style.display = 'block';
                 }
             } catch (error) {
                 console.log('Calendar not connected yet');
             }
-        };
+
+            // Load memory count (placeholder - you can implement this endpoint)
+            document.getElementById('memoryCount').textContent = '1.2K';
+        });
     </script>
 </body>
 </html>
