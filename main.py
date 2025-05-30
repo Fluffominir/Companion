@@ -145,3 +145,40 @@ async def root():
 @app.get("/api/status")
 async def api_status():
     return {"message": "API is running"}
+
+@app.post("/api/add-calendar-event")
+async def add_calendar_event(event_data: dict):
+    """Future: Add calendar events via Google Calendar API"""
+    # TODO: Implement Google Calendar API integration
+    return {"message": "Calendar integration coming soon", "event": event_data}
+
+@app.get("/api/upcoming-events")
+async def get_upcoming_events():
+    """Future: Get upcoming calendar events"""
+    # TODO: Implement Google Calendar API integration
+    return {"events": [], "message": "Calendar integration coming soon"}
+
+@app.post("/api/add-note")
+async def add_quick_note(note: dict):
+    """Add quick notes that get stored in memory"""
+    try:
+        note_text = note.get("text", "")
+        category = note.get("category", "quick_notes")
+        
+        # Store in Pinecone memory
+        from datetime import datetime
+        vector_id = f"quick_note_{datetime.now().isoformat()}"
+        metadata = {
+            "text": note_text,
+            "source": "quick_note",
+            "category": category,
+            "timestamp": datetime.now().isoformat()
+        }
+        index.upsert([(vector_id, embed(note_text), metadata)])
+        
+        return {"message": "Note added successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error adding note: {str(e)}")
+
+# Serve static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
