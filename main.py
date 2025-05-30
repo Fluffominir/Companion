@@ -41,28 +41,79 @@ def embed(text: str) -> List[float]:
         model="text-embedding-3-small", input=text
     ).data[0].embedding
 
-def fetch_memories(q: str, k: int = 3) -> List[Dict]:
-    return index.query(vector=embed(q), top_k=k, include_metadata=True).matches
+def fetch_memories(q: str, k: int = 5) -> List[Dict]:
+    """Fetch relevant memories with enhanced filtering"""
+    results = index.query(
+        vector=embed(q), 
+        top_k=k, 
+        include_metadata=True,
+        filter={}  # You can add filters here based on category, date, etc.
+    ).matches
+    return results
 
-@app.get("/")
-async def root():
-    return {"message": "API is running"}
+def format_memory_context(memories: List[Dict]) -> str:
+    """Format memories into a coherent context"""
+    if not memories:
+        return ""
+
+    context_parts = []
+    categories = {}
+
+    # Group memories by category
+    for memory in memories:
+        metadata = memory.metadata
+        category = metadata.get('category', 'general')
+        if category not in categories:
+            categories[category] = []
+        categories[category].append(metadata.get('text', ''))
+
+    # Format by category
+    for category, texts in categories.items():
+        if category != 'general':
+            context_parts.append(f"\n{category.upper()} NOTES:")
+            for text in texts:
+                snippet = text[:200] + "..." if len(text) > 200 else text
+                context_parts.append(f"- {snippet}")
+
+    return "\n".join(context_parts)
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
     try:
         memories = fetch_memories(req.message)
-        msgs = [
-            {
-                "role": "system",
-                "content": "You are Michael's helpful personal assistant.",
-            }
-        ]
-        for m in memories:
-            snippet = m.metadata.get("text", "")[:150]
-            msgs.append({"role": "system", "content": f"(Memory): {snippet}"})
+        memory_context = format_memory_context(memories)
+
+        system_prompt = """You are Michael's helpful personal AI companion. You have access to Michael's notes, thoughts, and information.
+
+Key traits:
+- Be conversational and supportive
+- Remember context from previous interactions
+- Help with goals, projects, and daily tasks
+- Provide insights based on stored memories
+- Ask clarifying questions when helpful
+
+Use the memories below to provide relevant, personalized assistance."""
+
+        msgs = [{"role": "system", "content": system_prompt}]
+
+        if memory_context:
+            msgs.append({
+                "role": "system", 
+                "content": f"RELEVANT MEMORIES:\n{memory_context}"
+            })
+
         msgs.append({"role": "user", "content": req.message})
-        resp = client.chat.completions.create(model="gpt-4o", messages=msgs)
+
+        resp = client.chat.completions.create(
+            model="gpt-4o", 
+            messages=msgs,
+            temperature=0.7,
+            max_tokens=500
+        )
         return {"response": resp.choices[0].message.content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
+
+@app.get("/")
+async def root():
+    return {"message": "API is running"}
