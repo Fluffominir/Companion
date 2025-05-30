@@ -12,6 +12,17 @@ import seaborn as sns
 import io
 import base64
 
+import os
+import json
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta
+from typing import Dict, List, Any
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from openai import OpenAI
+from pinecone import Pinecone
+
 class PersonalAnalytics:
     def __init__(self):
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))

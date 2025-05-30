@@ -748,11 +748,60 @@ async def get_hue_data():
         logger.error(f"Hue integration error: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting Hue data: {str(e)}")
 
+@app.get("/api/integrations/youtube")
+async def get_youtube_data():
+    """Get YouTube data with OAuth"""
+    if 'google_credentials' not in user_sessions:
+        return {"error": "Please connect your Google account first", "auth_required": True}
+    
+    try:
+        data = integrations.get_youtube_data(user_sessions['google_credentials'])
+        return data
+    except Exception as e:
+        logger.error(f"YouTube integration error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting YouTube data: {str(e)}")
+
+@app.get("/api/integrations/gmail")
+async def get_gmail_data():
+    """Get Gmail insights"""
+    if 'google_credentials' not in user_sessions:
+        return {"error": "Please connect your Google account first", "auth_required": True}
+    
+    try:
+        data = integrations.get_gmail_data(user_sessions['google_credentials'])
+        return data
+    except Exception as e:
+        logger.error(f"Gmail integration error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting Gmail data: {str(e)}")
+
+@app.get("/api/integrations/drive")
+async def get_drive_data():
+    """Get Google Drive insights"""
+    if 'google_credentials' not in user_sessions:
+        return {"error": "Please connect your Google account first", "auth_required": True}
+    
+    try:
+        data = integrations.get_drive_data(user_sessions['google_credentials'])
+        return data
+    except Exception as e:
+        logger.error(f"Drive integration error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting Drive data: {str(e)}")
+
+@app.get("/api/integrations/nas/setup")
+async def setup_nas_connection():
+    """Setup and test NAS connection"""
+    try:
+        result = integrations.setup_nas_connection()
+        return result
+    except Exception as e:
+        logger.error(f"NAS setup error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error setting up NAS: {str(e)}")
+
 @app.get("/api/integrations/nas/scan")
 async def scan_nas_files():
     """Scan NAS for files"""
     try:
-        files = integrations.scan_nas_files()
+        files = integrations.scan_nas_files_advanced()
         return {"files": files, "count": len(files)}
     except Exception as e:
         logger.error(f"NAS scan error: {e}")
