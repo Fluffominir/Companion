@@ -1,6 +1,8 @@
 import os
 from typing import List, Dict
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from openai import OpenAI
 from pinecone import Pinecone
@@ -116,4 +118,8 @@ Use the memories below to provide relevant, personalized assistance."""
 
 @app.get("/")
 async def root():
+    return FileResponse('static/index.html')
+
+@app.get("/api/status")
+async def api_status():
     return {"message": "API is running"}
