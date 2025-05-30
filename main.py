@@ -35,23 +35,30 @@ index = pc.Index(INDEX_NAME)
 
 app = FastAPI()
 
+# Simple in-memory conversation storage (upgrade to Redis/DB later)
+conversation_memory = {}
+
 class ChatRequest(BaseModel):
     message: str
+    session_id: str = "default"
 
 def embed(text: str) -> List[float]:
     return client.embeddings.create(
         model="text-embedding-3-small", input=text
     ).data[0].embedding
 
-def fetch_memories(q: str, k: int = 5) -> List[Dict]:
-    """Fetch relevant memories with enhanced filtering"""
+def fetch_memories(q: str, k: int = 8) -> List[Dict]:
+    """Fetch relevant memories with enhanced filtering and scoring"""
     results = index.query(
         vector=embed(q), 
         top_k=k, 
         include_metadata=True,
-        filter={}  # You can add filters here based on category, date, etc.
+        filter={}
     ).matches
-    return results
+    
+    # Filter by relevance score (only include high-confidence matches)
+    filtered_results = [r for r in results if r.score > 0.7]
+    return filtered_results if filtered_results else results[:3]
 
 def format_memory_context(memories: List[Dict]) -> str:
     """Format memories into a coherent context"""
@@ -85,6 +92,10 @@ async def chat(req: ChatRequest):
         memories = fetch_memories(req.message)
         memory_context = format_memory_context(memories)
 
+        # Get or create conversation history
+        if req.session_id not in conversation_memory:
+            conversation_memory[req.session_id] = []
+
         system_prompt = """You are Michael's helpful personal AI companion. You have access to Michael's notes, thoughts, and information.
 
 Key traits:
@@ -104,6 +115,10 @@ Use the memories below to provide relevant, personalized assistance."""
                 "content": f"RELEVANT MEMORIES:\n{memory_context}"
             })
 
+        # Add recent conversation history (last 6 messages)
+        recent_conversation = conversation_memory[req.session_id][-6:]
+        msgs.extend(recent_conversation)
+
         msgs.append({"role": "user", "content": req.message})
 
         resp = client.chat.completions.create(
@@ -112,7 +127,14 @@ Use the memories below to provide relevant, personalized assistance."""
             temperature=0.7,
             max_tokens=500
         )
-        return {"response": resp.choices[0].message.content}
+        
+        response_content = resp.choices[0].message.content
+        
+        # Store conversation
+        conversation_memory[req.session_id].append({"role": "user", "content": req.message})
+        conversation_memory[req.session_id].append({"role": "assistant", "content": response_content})
+        
+        return {"response": response_content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
 
