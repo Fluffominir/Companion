@@ -8,3 +8,15 @@ packages = ["cargo", "libiconv", "libxcrypt", "rustc"]
 [[ports]]
 localPort = 8000
 externalPort = 80
+
+[workflows]
+runButton = "Start API Server"
+
+[[workflows.workflow]]
+name = "Start API Server"
+author = 43316633
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
