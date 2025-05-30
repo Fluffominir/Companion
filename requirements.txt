@@ -22,3 +22,15 @@ matplotlib
 pandas
 seaborn
 numpy
+matplotlib
+pandas
+pdfplumber
+python-dotenv
+requests
+seaborn
+matplotlib
+pandas
+pdfplumber
+python-dotenv
+requests
+seaborn
