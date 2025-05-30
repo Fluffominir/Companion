@@ -1,12 +1,14 @@
 import os
 from typing import List, Dict
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from openai import OpenAI
 from pinecone import Pinecone
 from pinecone import ServerlessSpec
+from google_calendar import GoogleCalendarManager
+import json
 
 OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
@@ -37,6 +39,12 @@ app = FastAPI()
 
 # Simple in-memory conversation storage (upgrade to Redis/DB later)
 conversation_memory = {}
+
+# Initialize Google Calendar Manager
+calendar_manager = GoogleCalendarManager()
+
+# Simple session storage (upgrade to Redis/DB later)
+user_sessions = {}
 
 class ChatRequest(BaseModel):
     message: str
@@ -146,17 +154,87 @@ async def root():
 async def api_status():
     return {"message": "API is running"}
 
-@app.post("/api/add-calendar-event")
-async def add_calendar_event(event_data: dict):
-    """Future: Add calendar events via Google Calendar API"""
-    # TODO: Implement Google Calendar API integration
-    return {"message": "Calendar integration coming soon", "event": event_data}
+@app.get("/auth/google")
+async def google_auth(request: Request):
+    """Initiate Google OAuth flow"""
+    redirect_uri = str(request.url_for('google_callback')).replace('http://', 'https://')
+    flow = calendar_manager.create_auth_flow(redirect_uri)
+    authorization_url, state = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true'
+    )
+    # Store state in session (in production, use proper session management)
+    user_sessions['oauth_state'] = state
+    return RedirectResponse(authorization_url)
+
+@app.get("/auth/google/callback")
+async def google_callback(request: Request, code: str = None, state: str = None):
+    """Handle Google OAuth callback"""
+    if state != user_sessions.get('oauth_state'):
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+    
+    redirect_uri = str(request.url_for('google_callback')).replace('http://', 'https://')
+    flow = calendar_manager.create_auth_flow(redirect_uri)
+    
+    authorization_response = str(request.url).replace('http://', 'https://')
+    flow.fetch_token(authorization_response=authorization_response)
+    
+    # Store credentials (in production, encrypt and store securely)
+    credentials = flow.credentials
+    user_sessions['google_credentials'] = {
+        'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes
+    }
+    
+    return RedirectResponse("/", status_code=302)
 
 @app.get("/api/upcoming-events")
 async def get_upcoming_events():
-    """Future: Get upcoming calendar events"""
-    # TODO: Implement Google Calendar API integration
-    return {"events": [], "message": "Calendar integration coming soon"}
+    """Get upcoming calendar events"""
+    if 'google_credentials' not in user_sessions:
+        return {"events": [], "message": "Please connect your Google Calendar first", "auth_required": True}
+    
+    try:
+        service = calendar_manager.get_calendar_service(user_sessions['google_credentials'])
+        events = calendar_manager.get_upcoming_events(service)
+        return {"events": events, "message": "Success"}
+    except Exception as e:
+        return {"events": [], "message": f"Error fetching events: {str(e)}"}
+
+@app.post("/api/add-calendar-event")
+async def add_calendar_event(event_data: dict):
+    """Add calendar events via Google Calendar API"""
+    if 'google_credentials' not in user_sessions:
+        return {"message": "Please connect your Google Calendar first", "auth_required": True}
+    
+    try:
+        service = calendar_manager.get_calendar_service(user_sessions['google_credentials'])
+        
+        # Format event for Google Calendar API
+        google_event = {
+            'summary': event_data.get('title', 'New Event'),
+            'description': event_data.get('description', ''),
+            'start': {
+                'dateTime': event_data.get('start_time'),
+                'timeZone': 'UTC',
+            },
+            'end': {
+                'dateTime': event_data.get('end_time'),
+                'timeZone': 'UTC',
+            },
+        }
+        
+        if event_data.get('location'):
+            google_event['location'] = event_data['location']
+        
+        event = calendar_manager.create_event(service, google_event)
+        return {"message": "Event created successfully", "event_id": event.get('id') if event else None}
+    except Exception as e:
+        return {"message": f"Error creating event: {str(e)}"}
 
 @app.post("/api/add-note")
 async def add_quick_note(note: dict):
