@@ -1,7 +1,7 @@
 
 import os
 from typing import List, Dict
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
@@ -11,6 +11,10 @@ from pinecone import ServerlessSpec
 from google_calendar import GoogleCalendarManager
 import json
 import logging
+from datetime import datetime
+import tempfile
+import easyocr
+from PIL import Image
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -47,9 +51,21 @@ conversation_memory = {}
 calendar_manager = GoogleCalendarManager()
 user_sessions = {}
 
+# Initialize OCR for handwriting recognition
+try:
+    ocr_reader = easyocr.Reader(['en'])
+    logger.info("OCR reader initialized for handwriting recognition")
+except Exception as e:
+    logger.warning(f"OCR initialization failed: {e}")
+    ocr_reader = None
+
 class ChatRequest(BaseModel):
     message: str
     session_id: str = "default"
+
+class AnalysisRequest(BaseModel):
+    query: str
+    category: str = "all"
 
 def embed(text: str) -> List[float]:
     try:
@@ -60,28 +76,37 @@ def embed(text: str) -> List[float]:
         logger.error(f"Embedding error: {e}")
         raise HTTPException(status_code=500, detail="Error creating embedding")
 
-def fetch_memories(q: str, k: int = 8) -> List[Dict]:
-    """Enhanced memory retrieval with better filtering"""
+def fetch_memories(q: str, k: int = 10, category_filter: str = None) -> List[Dict]:
+    """Enhanced memory retrieval with category filtering and better scoring"""
     try:
+        filter_dict = {}
+        if category_filter and category_filter != "all":
+            filter_dict["category"] = category_filter
+            
         results = index.query(
             vector=embed(q), 
-            top_k=k * 2,  # Get more results to filter better
+            top_k=k * 3,  # Get more results for better filtering
             include_metadata=True,
-            filter={}
+            filter=filter_dict
         ).matches
         
-        # Enhanced filtering based on relevance and diversity
+        # Enhanced filtering and scoring
         filtered_results = []
         seen_sources = set()
         
         for result in results:
-            if result.score > 0.75:  # High confidence
+            # High confidence threshold
+            if result.score > 0.8:
                 filtered_results.append(result)
-            elif result.score > 0.65 and len(filtered_results) < 3:  # Medium confidence
+            # Medium confidence with diversity
+            elif result.score > 0.7:
                 source = result.metadata.get('source', '')
-                if source not in seen_sources:
+                if source not in seen_sources or len(filtered_results) < 3:
                     filtered_results.append(result)
                     seen_sources.add(source)
+            # Lower confidence only if we don't have enough results
+            elif result.score > 0.6 and len(filtered_results) < 2:
+                filtered_results.append(result)
         
         return filtered_results[:k]
     except Exception as e:
@@ -89,14 +114,14 @@ def fetch_memories(q: str, k: int = 8) -> List[Dict]:
         return []
 
 def format_memory_context(memories: List[Dict]) -> str:
-    """Enhanced memory formatting with better organization"""
+    """Enhanced memory formatting with better organization and relevance"""
     if not memories:
         return ""
 
     context_parts = []
     categories = {}
 
-    # Group and prioritize memories
+    # Group memories by category
     for memory in memories:
         metadata = memory.metadata
         category = metadata.get('category', 'general')
@@ -104,77 +129,96 @@ def format_memory_context(memories: List[Dict]) -> str:
         if category not in categories:
             categories[category] = []
         
-        text_snippet = metadata.get('text', '')[:400]
-        if len(metadata.get('text', '')) > 400:
+        # Get more text for better context
+        text_snippet = metadata.get('text', '')[:500]
+        if len(metadata.get('text', '')) > 500:
             text_snippet += "..."
             
         categories[category].append({
             'text': text_snippet,
             'source': os.path.basename(metadata.get('source', 'unknown')),
             'score': memory.score,
-            'file_type': metadata.get('file_type', 'unknown')
+            'file_type': metadata.get('file_type', 'unknown'),
+            'timestamp': metadata.get('timestamp', '')
         })
 
     # Priority order for categories
     priority_categories = [
-        'personality', 'goals', 'work', 'projects', 
-        'personal_journal', 'ideas', 'health', 'books'
+        'personality', 'goals', 'personal_journal', 'work', 'projects', 
+        'ideas', 'health', 'books', 'meetings', 'general'
     ]
 
-    # Format with priorities
+    # Format with priorities and better structure
     for category in priority_categories:
         if category in categories and categories[category]:
-            items = sorted(categories[category], key=lambda x: x['score'], reverse=True)[:2]
-            context_parts.append(f"\n{category.upper().replace('_', ' ')} CONTEXT:")
-            for item in items:
-                context_parts.append(f"- From {item['source']}: {item['text']}")
+            items = sorted(categories[category], key=lambda x: x['score'], reverse=True)[:3]
+            context_parts.append(f"\n═══ {category.upper().replace('_', ' ')} INSIGHTS ═══")
+            
+            for i, item in enumerate(items, 1):
+                relevance = "🔥 HIGHLY RELEVANT" if item['score'] > 0.85 else "📌 RELEVANT" if item['score'] > 0.75 else "💡 RELATED"
+                context_parts.append(f"\n{i}. {relevance} | From: {item['source']}")
+                context_parts.append(f"   Content: {item['text']}")
+                if item['timestamp']:
+                    try:
+                        dt = datetime.fromisoformat(item['timestamp'].replace('Z', '+00:00'))
+                        context_parts.append(f"   Date: {dt.strftime('%Y-%m-%d')}")
+                    except:
+                        pass
 
-    return "\n".join(context_parts)
+    return "\n".join(context_parts) if context_parts else ""
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
     try:
         logger.info(f"Chat request from {req.session_id}: {req.message[:100]}...")
         
-        memories = fetch_memories(req.message)
+        # Enhanced memory retrieval
+        memories = fetch_memories(req.message, k=12)
         memory_context = format_memory_context(memories)
 
         # Enhanced conversation management
         if req.session_id not in conversation_memory:
             conversation_memory[req.session_id] = []
 
-        system_prompt = """You are Michael's personal AI companion and assistant. You have deep knowledge about Michael from his journals, goals, personality assessments, work at Rocket Launch Studio, books he's read, and personal preferences.
+        system_prompt = """You are Michael's advanced personal AI companion with deep, contextual knowledge about him. You have comprehensive access to his personal data, thoughts, goals, work, and experiences.
 
-Core traits and approach:
-- Be genuinely helpful and insightful, drawing from Michael's actual data
-- Reference specific details from his journals, goals, and experiences when relevant
-- Maintain context about his work, relationships, and personal growth journey
-- Provide actionable advice based on his documented patterns and preferences
-- Be conversational but professional, matching his communication style
-- Help him connect ideas across different areas of his life
-- Support his goals at Rocket Launch Studio and personal projects
+Your capabilities and approach:
+🧠 DEEP PERSONAL KNOWLEDGE: You know Michael's personality traits, work patterns, relationships, goals, and personal history from his extensive documentation
+📚 COMPREHENSIVE CONTEXT: You have access to his journals (2022-2025), personality assessments, work at Rocket Launch Studio, books he's read, health records, and projects
+🎯 ACTIONABLE INSIGHTS: Provide specific, personalized advice based on his documented patterns, preferences, and past experiences
+🔗 PATTERN RECOGNITION: Connect insights across different areas of his life - work, personal growth, relationships, health, and creative projects
+💡 PROACTIVE ASSISTANCE: Anticipate needs and offer relevant suggestions based on his history and current context
+🎨 CREATIVE COLLABORATION: Support his projects and creative endeavors with relevant insights from his knowledge base
 
-Key areas of knowledge:
-- Michael's personality traits and assessment results
-- His journaling patterns and insights from 2022-2025
-- Goals and aspirations 
-- Work context at Rocket Launch Studio
-- Reading and learning from books like "Attached," "The Body Keeps the Score," etc.
-- Health and wellness tracking
-- Creative projects and business development
+Key areas of expertise:
+- Michael's personality traits and behavioral patterns
+- His journaling insights and personal growth journey
+- Professional context at Rocket Launch Studio
+- Reading insights from books like "Attached," "The Body Keeps the Score," "E-Myth Revisited"
+- Health and wellness tracking and optimization
+- Creative projects and business development strategies
+- Relationship dynamics and communication preferences
 
-Always be specific and reference actual information when possible."""
+Communication style:
+- Be conversational but insightful
+- Reference specific details from his actual data when relevant
+- Provide actionable, personalized recommendations
+- Help him see connections he might have missed
+- Support his goals with evidence from his own documented experiences
+- Be genuinely helpful while maintaining his preferred communication style
+
+Always ground your responses in actual information from his personal data when possible."""
 
         msgs = [{"role": "system", "content": system_prompt}]
 
         if memory_context:
             msgs.append({
                 "role": "system", 
-                "content": f"RELEVANT CONTEXT FROM MICHAEL'S DATA:\n{memory_context}"
+                "content": f"RELEVANT CONTEXT FROM MICHAEL'S PERSONAL DATA:\n{memory_context}"
             })
 
-        # Enhanced conversation history (last 8 messages)
-        recent_conversation = conversation_memory[req.session_id][-8:]
+        # Enhanced conversation history (last 10 messages for better context)
+        recent_conversation = conversation_memory[req.session_id][-10:]
         msgs.extend(recent_conversation)
         msgs.append({"role": "user", "content": req.message})
 
@@ -182,7 +226,7 @@ Always be specific and reference actual information when possible."""
             model="gpt-4o", 
             messages=msgs,
             temperature=0.7,
-            max_tokens=600
+            max_tokens=800
         )
         
         response_content = resp.choices[0].message.content
@@ -192,13 +236,142 @@ Always be specific and reference actual information when possible."""
         conversation_memory[req.session_id].append({"role": "assistant", "content": response_content})
         
         # Keep conversation memory manageable
-        if len(conversation_memory[req.session_id]) > 20:
-            conversation_memory[req.session_id] = conversation_memory[req.session_id][-16:]
+        if len(conversation_memory[req.session_id]) > 24:
+            conversation_memory[req.session_id] = conversation_memory[req.session_id][-20:]
         
         return {"response": response_content}
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
+
+@app.post("/analyze")
+async def analyze_patterns(req: AnalysisRequest):
+    """Advanced analysis of personal data patterns"""
+    try:
+        memories = fetch_memories(req.query, k=20, category_filter=req.category)
+        
+        if not memories:
+            return {"analysis": "No relevant data found for this query.", "insights": []}
+        
+        # Organize by categories and time
+        analysis_data = {}
+        for memory in memories:
+            category = memory.metadata.get('category', 'general')
+            if category not in analysis_data:
+                analysis_data[category] = []
+            analysis_data[category].append({
+                'text': memory.metadata.get('text', ''),
+                'source': memory.metadata.get('source', ''),
+                'score': memory.score,
+                'timestamp': memory.metadata.get('timestamp', '')
+            })
+        
+        # Generate insights using AI
+        analysis_prompt = f"""Analyze Michael's personal data patterns based on this query: "{req.query}"
+
+Data categories found: {list(analysis_data.keys())}
+
+Provide insights in these areas:
+1. Key patterns and trends
+2. Notable connections between different areas
+3. Actionable recommendations
+4. Areas for potential improvement or focus
+
+Be specific and reference the actual data when possible."""
+
+        analysis_resp = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": analysis_prompt},
+                {"role": "user", "content": f"Analysis data: {json.dumps(analysis_data, indent=2)[:3000]}..."}
+            ],
+            temperature=0.3,
+            max_tokens=600
+        )
+        
+        return {
+            "analysis": analysis_resp.choices[0].message.content,
+            "categories_found": list(analysis_data.keys()),
+            "total_references": len(memories),
+            "insights": [
+                f"Found {len(cat_data)} references in {cat}" 
+                for cat, cat_data in analysis_data.items()
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Analysis error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing patterns: {str(e)}")
+
+@app.post("/upload-and-process")
+async def upload_and_process(file: UploadFile = File(...)):
+    """Upload and process new files with OCR support"""
+    try:
+        # Save uploaded file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.filename.split('.')[-1]}") as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_path = temp_file.name
+        
+        text_content = ""
+        file_type = file.filename.split('.')[-1].lower()
+        
+        # Process based on file type
+        if file_type == 'pdf':
+            import pdfplumber
+            with pdfplumber.open(temp_path) as pdf:
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text_content += page_text + "\n"
+        
+        elif file_type in ['jpg', 'jpeg', 'png', 'tiff', 'bmp']:
+            if ocr_reader:
+                results = ocr_reader.readtext(temp_path)
+                text_content = ' '.join([result[1] for result in results])
+            else:
+                return {"error": "OCR not available for image processing"}
+        
+        # Clean up temp file
+        os.unlink(temp_path)
+        
+        if not text_content.strip():
+            return {"error": "No text could be extracted from the file"}
+        
+        # Process and store in memory
+        from scripts.boot_memory import categorize_content, chunk_text, clean_text
+        
+        text_content = clean_text(text_content)
+        category = categorize_content(text_content, file.filename)
+        chunks = chunk_text(text_content)
+        
+        vector_count = 0
+        for i, chunk in enumerate(chunks):
+            if chunk.strip():
+                embedding = embed(chunk)
+                if embedding:
+                    vector_id = f"upload_{file.filename}_{i}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                    metadata = {
+                        "text": chunk,
+                        "source": f"uploaded_{file.filename}",
+                        "category": category,
+                        "chunk_index": i,
+                        "total_chunks": len(chunks),
+                        "timestamp": datetime.now().isoformat(),
+                        "file_type": file_type
+                    }
+                    index.upsert([(vector_id, embedding, metadata)])
+                    vector_count += 1
+        
+        return {
+            "message": f"Successfully processed {file.filename}",
+            "category": category,
+            "chunks_created": vector_count,
+            "text_preview": text_content[:200] + "..." if len(text_content) > 200 else text_content
+        }
+        
+    except Exception as e:
+        logger.error(f"Upload processing error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing upload: {str(e)}")
 
 @app.get("/")
 async def root():
@@ -207,16 +380,46 @@ async def root():
 @app.get("/api/status")
 async def api_status():
     try:
-        # Check Pinecone connection
+        # Check Pinecone connection and get detailed stats
         stats = index.describe_index_stats()
+        
+        # Get category breakdown if possible
+        try:
+            sample_query = index.query(
+                vector=[0.0] * 1536,
+                top_k=100,
+                include_metadata=True
+            )
+            categories = {}
+            for match in sample_query.matches:
+                cat = match.metadata.get('category', 'unknown')
+                categories[cat] = categories.get(cat, 0) + 1
+        except:
+            categories = {}
+        
         return {
-            "message": "API is running",
-            "memory_vectors": stats.total_vector_count,
+            "message": "AI Companion API is running",
+            "total_memory_vectors": stats.total_vector_count,
+            "categories": categories,
+            "ocr_available": ocr_reader is not None,
+            "features": [
+                "Advanced memory retrieval",
+                "Multi-format document processing",
+                "Handwriting recognition (OCR)",
+                "Pattern analysis",
+                "Google Calendar integration",
+                "File upload processing"
+            ],
             "status": "healthy"
         }
     except Exception as e:
-        return {"message": "API is running", "status": "degraded", "error": str(e)}
+        return {
+            "message": "API is running with limited functionality", 
+            "status": "degraded", 
+            "error": str(e)
+        }
 
+# Keep all existing calendar endpoints
 @app.get("/auth/google")
 async def google_auth(request: Request):
     """Initiate Google OAuth flow"""
@@ -313,7 +516,6 @@ async def add_quick_note(note: dict):
         note_text = note.get("text", "")
         category = note.get("category", "quick_notes")
         
-        from datetime import datetime
         vector_id = f"quick_note_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         metadata = {
             "text": note_text,

@@ -1,10 +1,20 @@
 
 import glob, os
 import pypdf
+import pdfplumber
+from PIL import Image
+import easyocr
+import pytesseract
+from docx import Document
+import openpyxl
+from pptx import Presentation
 from openai import OpenAI
 from pinecone import Pinecone, ServerlessSpec
+import re
+from datetime import datetime
+import json
 
-OPENAI_API_KEY  = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 INDEX_NAME = "companion-memory"
 
@@ -24,6 +34,14 @@ if INDEX_NAME not in [i["name"] for i in pc.list_indexes()]:
     )
 index = pc.Index(INDEX_NAME)
 
+# Initialize OCR reader
+try:
+    ocr_reader = easyocr.Reader(['en'])
+    print("EasyOCR initialized for handwriting recognition")
+except Exception as e:
+    print(f"OCR initialization warning: {e}")
+    ocr_reader = None
+
 def embed(text):  
     try:
         return client.embeddings.create(
@@ -32,9 +50,6 @@ def embed(text):
     except Exception as e:
         print(f"Embedding error: {e}")
         return None
-
-import re
-from datetime import datetime
 
 def categorize_content(text, filename):
     """Enhanced categorization with better logic"""
@@ -65,23 +80,97 @@ def categorize_content(text, filename):
     else:
         return 'general'
 
-def extract_pdf_text(pdf_path):
-    """Extract text using pypdf library"""
+def extract_text_with_ocr(file_path):
+    """Extract text from images using OCR for handwriting recognition"""
     try:
-        with open(pdf_path, 'rb') as file:
-            pdf_reader = pypdf.PdfReader(file)
-            text = ""
-            for page in pdf_reader.pages:
-                try:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
-                except Exception as e:
-                    print(f"Error extracting page from {pdf_path}: {e}")
-                    continue
-        return text.strip()
+        if ocr_reader:
+            # Use EasyOCR for better handwriting recognition
+            results = ocr_reader.readtext(file_path)
+            text = ' '.join([result[1] for result in results])
+            return text
+        else:
+            # Fallback to pytesseract
+            image = Image.open(file_path)
+            text = pytesseract.image_to_string(image)
+            return text
     except Exception as e:
-        print(f"Error reading PDF {pdf_path}: {e}")
+        print(f"OCR error for {file_path}: {e}")
+        return ""
+
+def extract_pdf_text_advanced(pdf_path):
+    """Advanced PDF text extraction with multiple methods"""
+    text = ""
+    
+    # Method 1: Try pdfplumber (better for complex layouts)
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+    except Exception as e:
+        print(f"PDFPlumber failed for {pdf_path}: {e}")
+    
+    # Method 2: Fallback to pypdf if pdfplumber didn't work well
+    if len(text.strip()) < 100:
+        try:
+            with open(pdf_path, 'rb') as file:
+                pdf_reader = pypdf.PdfReader(file)
+                fallback_text = ""
+                for page in pdf_reader.pages:
+                    try:
+                        page_text = page.extract_text()
+                        if page_text:
+                            fallback_text += page_text + "\n"
+                    except Exception as e:
+                        continue
+                if len(fallback_text) > len(text):
+                    text = fallback_text
+        except Exception as e:
+            print(f"PyPDF fallback failed for {pdf_path}: {e}")
+    
+    return text.strip()
+
+def extract_docx_text(docx_path):
+    """Extract text from Word documents"""
+    try:
+        doc = Document(docx_path)
+        text = []
+        for paragraph in doc.paragraphs:
+            text.append(paragraph.text)
+        return '\n'.join(text)
+    except Exception as e:
+        print(f"Error reading DOCX {docx_path}: {e}")
+        return ""
+
+def extract_xlsx_text(xlsx_path):
+    """Extract text from Excel files"""
+    try:
+        workbook = openpyxl.load_workbook(xlsx_path)
+        text = []
+        for sheet_name in workbook.sheetnames:
+            sheet = workbook[sheet_name]
+            text.append(f"Sheet: {sheet_name}")
+            for row in sheet.iter_rows(values_only=True):
+                row_text = [str(cell) if cell is not None else "" for cell in row]
+                text.append(" | ".join(row_text))
+        return '\n'.join(text)
+    except Exception as e:
+        print(f"Error reading XLSX {xlsx_path}: {e}")
+        return ""
+
+def extract_pptx_text(pptx_path):
+    """Extract text from PowerPoint files"""
+    try:
+        prs = Presentation(pptx_path)
+        text = []
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if hasattr(shape, "text"):
+                    text.append(shape.text)
+        return '\n'.join(text)
+    except Exception as e:
+        print(f"Error reading PPTX {pptx_path}: {e}")
         return ""
 
 def chunk_text(text, max_length=600):
@@ -120,12 +209,15 @@ def clean_text(text):
 
 vector_count = 0
 processed_files = []
+categories_used = set()
 
-print("Starting memory synchronization...")
+print("Starting comprehensive memory synchronization...")
+print(f"Working directory: {os.getcwd()}")
+print(f"Looking for files in: {os.path.abspath('docs')}")
 
 # Process markdown files
 md_files = glob.glob("docs/**/*.md", recursive=True)
-print(f"Found {len(md_files)} markdown files")
+print(f"Found {len(md_files)} markdown files: {md_files}")
 
 for path in md_files:
     try:
@@ -137,6 +229,7 @@ for path in md_files:
             
         txt = clean_text(txt)
         category = categorize_content(txt, path)
+        categories_used.add(category)
         chunks = chunk_text(txt)
         
         for i, chunk in enumerate(chunks):
@@ -147,7 +240,7 @@ for path in md_files:
             if embedding is None:
                 continue
                 
-            vector_id = f"{path}_{i}" if len(chunks) > 1 else path.replace('/', '_')
+            vector_id = f"{path}_{i}" if len(chunks) > 1 else path.replace('/', '_').replace(' ', '_')
             metadata = {
                 "text": chunk,
                 "source": path,
@@ -162,19 +255,19 @@ for path in md_files:
             vector_count += 1
         
         processed_files.append(path)
-        print(f"Processed: {path} ({category})")
+        print(f"✓ Processed: {path} ({category})")
         
     except Exception as e:
-        print(f"Error processing {path}: {e}")
+        print(f"✗ Error processing {path}: {e}")
 
 # Process PDF files
 pdf_files = glob.glob("docs/**/*.pdf", recursive=True)
-print(f"Found {len(pdf_files)} PDF files")
+print(f"Found {len(pdf_files)} PDF files: {pdf_files}")
 
 for path in pdf_files:
     try:
         print(f"Processing PDF: {path}")
-        txt = extract_pdf_text(path)
+        txt = extract_pdf_text_advanced(path)
         
         if not txt.strip():
             print(f"No text extracted from {path}")
@@ -182,7 +275,8 @@ for path in pdf_files:
             
         txt = clean_text(txt)
         category = categorize_content(txt, path)
-        chunks = chunk_text(txt, max_length=800)  # Larger chunks for PDFs
+        categories_used.add(category)
+        chunks = chunk_text(txt, max_length=800)
         
         processed_chunks = 0
         for i, chunk in enumerate(chunks):
@@ -209,13 +303,102 @@ for path in pdf_files:
             processed_chunks += 1
         
         processed_files.append(path)
-        print(f"Processed: {path} ({category}) - {processed_chunks} chunks")
+        print(f"✓ Processed: {path} ({category}) - {processed_chunks} chunks")
         
     except Exception as e:
-        print(f"Error processing PDF {path}: {e}")
+        print(f"✗ Error processing PDF {path}: {e}")
+
+# Process Office documents
+office_extensions = [
+    ('docs/**/*.docx', extract_docx_text),
+    ('docs/**/*.xlsx', extract_xlsx_text),
+    ('docs/**/*.pptx', extract_pptx_text)
+]
+
+for pattern, extract_func in office_extensions:
+    files = glob.glob(pattern, recursive=True)
+    for path in files:
+        try:
+            print(f"Processing Office document: {path}")
+            txt = extract_func(path)
+            
+            if not txt.strip():
+                continue
+                
+            txt = clean_text(txt)
+            category = categorize_content(txt, path)
+            categories_used.add(category)
+            chunks = chunk_text(txt)
+            
+            for i, chunk in enumerate(chunks):
+                if not chunk.strip():
+                    continue
+                    
+                embedding = embed(chunk)
+                if embedding is None:
+                    continue
+                    
+                vector_id = f"{path}_{i}".replace('/', '_').replace(' ', '_')
+                metadata = {
+                    "text": chunk,
+                    "source": path,
+                    "category": category,
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    "timestamp": datetime.now().isoformat(),
+                    "file_type": path.split('.')[-1]
+                }
+                
+                index.upsert([(vector_id, embedding, metadata)])
+                vector_count += 1
+            
+            processed_files.append(path)
+            print(f"✓ Processed: {path} ({category})")
+            
+        except Exception as e:
+            print(f"✗ Error processing {path}: {e}")
+
+# Process images for handwriting recognition
+image_files = glob.glob("docs/**/*.{jpg,jpeg,png,tiff,bmp}", recursive=True)
+if image_files:
+    print(f"Found {len(image_files)} image files for OCR processing")
+    
+    for path in image_files:
+        try:
+            print(f"Processing image with OCR: {path}")
+            txt = extract_text_with_ocr(path)
+            
+            if not txt.strip() or len(txt) < 10:
+                continue
+                
+            txt = clean_text(txt)
+            category = categorize_content(txt, path)
+            categories_used.add(category)
+            
+            embedding = embed(txt)
+            if embedding is None:
+                continue
+                
+            vector_id = path.replace('/', '_').replace(' ', '_')
+            metadata = {
+                "text": txt,
+                "source": path,
+                "category": category,
+                "timestamp": datetime.now().isoformat(),
+                "file_type": "image_ocr"
+            }
+            
+            index.upsert([(vector_id, embedding, metadata)])
+            vector_count += 1
+            processed_files.append(path)
+            print(f"✓ Processed OCR: {path} ({category})")
+            
+        except Exception as e:
+            print(f"✗ Error processing image {path}: {e}")
 
 total_files = len(processed_files)
-print(f"\nMemory sync complete!")
-print(f"Successfully processed {total_files} files")
-print(f"Created {vector_count} memory vectors")
-print(f"Categories used: {set(categorize_content('', f) for f in processed_files)}")
+print(f"\n🎉 Memory sync complete!")
+print(f"📁 Successfully processed {total_files} files")
+print(f"🧠 Created {vector_count} memory vectors")
+print(f"📂 Categories used: {sorted(categories_used)}")
+print(f"📊 Average vectors per file: {vector_count/total_files if total_files > 0 else 0:.1f}")
