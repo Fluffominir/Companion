@@ -13,6 +13,11 @@ from pinecone import Pinecone, ServerlessSpec
 import re
 from datetime import datetime
 import json
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
@@ -25,21 +30,26 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
 
 # Ensure index exists
-if INDEX_NAME not in [i["name"] for i in pc.list_indexes()]:
-    pc.create_index(
-        name=INDEX_NAME, 
-        dimension=1536, 
-        metric="cosine",
-        spec=ServerlessSpec(cloud="aws", region="us-west-2")
-    )
-index = pc.Index(INDEX_NAME)
+try:
+    if INDEX_NAME not in [i["name"] for i in pc.list_indexes()]:
+        pc.create_index(
+            name=INDEX_NAME, 
+            dimension=1536, 
+            metric="cosine",
+            spec=ServerlessSpec(cloud="aws", region="us-west-2")
+        )
+    index = pc.Index(INDEX_NAME)
+    logger.info(f"Connected to Pinecone index: {INDEX_NAME}")
+except Exception as e:
+    logger.error(f"Pinecone connection error: {e}")
+    raise
 
 # Initialize OCR reader
 try:
     ocr_reader = easyocr.Reader(['en'])
-    print("EasyOCR initialized for handwriting recognition")
+    logger.info("EasyOCR initialized for handwriting recognition")
 except Exception as e:
-    print(f"OCR initialization warning: {e}")
+    logger.warning(f"OCR initialization warning: {e}")
     ocr_reader = None
 
 def embed(text):  
@@ -48,7 +58,7 @@ def embed(text):
             model="text-embedding-3-small", input=text
         ).data[0].embedding
     except Exception as e:
-        print(f"Embedding error: {e}")
+        logger.error(f"Embedding error: {e}")
         return None
 
 def categorize_content(text, filename):
@@ -56,19 +66,26 @@ def categorize_content(text, filename):
     text_lower = text.lower()
     filename_lower = filename.lower()
     
-    # Priority-based categorization
-    if any(word in filename_lower for word in ['journal', 'diary']):
-        return 'personal_journal'
-    elif any(word in filename_lower for word in ['personality', 'profile', 'michael']):
+    # Priority-based categorization with more specific patterns
+    if any(word in filename_lower for word in ['journal', 'diary']) or any(word in text_lower for word in ['dear diary', 'today i', 'feeling', 'reflect']):
+        if '2022' in filename_lower or '2022' in text_lower:
+            return 'journal_2022'
+        elif '2024' in filename_lower or '2024' in text_lower:
+            return 'journal_2024'
+        elif '2025' in filename_lower or '2025' in text_lower:
+            return 'journal_2025'
+        else:
+            return 'personal_journal'
+    elif any(word in filename_lower for word in ['personality', 'profile', 'michael']) and not 'company' in filename_lower:
         return 'personality'
-    elif any(word in filename_lower for word in ['health', 'medical', 'superbill']):
+    elif any(word in filename_lower for word in ['health', 'medical', 'superbill', 'records']):
         return 'health'
     elif any(word in filename_lower for word in ['company', 'employee', 'handbook', 'rocket', 'launch']):
-        return 'work'
+        return 'work_rls'
     elif any(word in filename_lower for word in ['pitch', 'serwm', 'brand']):
-        return 'projects'
+        return 'projects_serwm'
     elif any(word in filename_lower for word in ['attached', 'body', 'myth', 'steal', 'show', 'emyth']):
-        return 'books'
+        return 'books_read'
     elif any(word in text_lower for word in ['goal', 'objective', 'want to', 'plan to', 'achieve']):
         return 'goals'
     elif any(word in text_lower for word in ['meeting', 'call', 'appointment', 'schedule']):
@@ -84,50 +101,53 @@ def extract_text_with_ocr(file_path):
     """Extract text from images using OCR for handwriting recognition"""
     try:
         if ocr_reader:
-            # Use EasyOCR for better handwriting recognition
             results = ocr_reader.readtext(file_path)
             text = ' '.join([result[1] for result in results])
             return text
         else:
-            # Fallback to pytesseract
             image = Image.open(file_path)
             text = pytesseract.image_to_string(image)
             return text
     except Exception as e:
-        print(f"OCR error for {file_path}: {e}")
+        logger.error(f"OCR error for {file_path}: {e}")
         return ""
 
 def extract_pdf_text_advanced(pdf_path):
-    """Advanced PDF text extraction with multiple methods"""
+    """Advanced PDF text extraction with multiple fallback methods"""
     text = ""
+    
+    logger.info(f"Extracting text from: {pdf_path}")
     
     # Method 1: Try pdfplumber (better for complex layouts)
     try:
         with pdfplumber.open(pdf_path) as pdf:
-            for page in pdf.pages:
+            for i, page in enumerate(pdf.pages):
                 page_text = page.extract_text()
                 if page_text:
-                    text += page_text + "\n"
+                    text += f"\n--- Page {i+1} ---\n{page_text}\n"
+        logger.info(f"PDFPlumber extracted {len(text)} characters from {pdf_path}")
     except Exception as e:
-        print(f"PDFPlumber failed for {pdf_path}: {e}")
+        logger.warning(f"PDFPlumber failed for {pdf_path}: {e}")
     
     # Method 2: Fallback to pypdf if pdfplumber didn't work well
-    if len(text.strip()) < 100:
+    if len(text.strip()) < 200:
         try:
             with open(pdf_path, 'rb') as file:
                 pdf_reader = pypdf.PdfReader(file)
                 fallback_text = ""
-                for page in pdf_reader.pages:
+                for i, page in enumerate(pdf_reader.pages):
                     try:
                         page_text = page.extract_text()
                         if page_text:
-                            fallback_text += page_text + "\n"
+                            fallback_text += f"\n--- Page {i+1} ---\n{page_text}\n"
                     except Exception as e:
+                        logger.warning(f"Error extracting page {i+1}: {e}")
                         continue
                 if len(fallback_text) > len(text):
                     text = fallback_text
+                    logger.info(f"PyPDF extracted {len(text)} characters from {pdf_path}")
         except Exception as e:
-            print(f"PyPDF fallback failed for {pdf_path}: {e}")
+            logger.error(f"PyPDF fallback failed for {pdf_path}: {e}")
     
     return text.strip()
 
@@ -140,7 +160,7 @@ def extract_docx_text(docx_path):
             text.append(paragraph.text)
         return '\n'.join(text)
     except Exception as e:
-        print(f"Error reading DOCX {docx_path}: {e}")
+        logger.error(f"Error reading DOCX {docx_path}: {e}")
         return ""
 
 def extract_xlsx_text(xlsx_path):
@@ -156,7 +176,7 @@ def extract_xlsx_text(xlsx_path):
                 text.append(" | ".join(row_text))
         return '\n'.join(text)
     except Exception as e:
-        print(f"Error reading XLSX {xlsx_path}: {e}")
+        logger.error(f"Error reading XLSX {xlsx_path}: {e}")
         return ""
 
 def extract_pptx_text(pptx_path):
@@ -170,10 +190,10 @@ def extract_pptx_text(pptx_path):
                     text.append(shape.text)
         return '\n'.join(text)
     except Exception as e:
-        print(f"Error reading PPTX {pptx_path}: {e}")
+        logger.error(f"Error reading PPTX {pptx_path}: {e}")
         return ""
 
-def chunk_text(text, max_length=600):
+def chunk_text(text, max_length=700):
     """Improved text chunking with better sentence boundaries"""
     if len(text) <= max_length:
         return [text]
@@ -198,7 +218,26 @@ def chunk_text(text, max_length=600):
     if current_chunk:
         chunks.append(current_chunk.strip())
     
-    return chunks if chunks else [text[:max_length]]
+    # If we still have chunks that are too long, split them
+    final_chunks = []
+    for chunk in chunks:
+        if len(chunk) <= max_length:
+            final_chunks.append(chunk)
+        else:
+            # Split on paragraphs or whitespace
+            words = chunk.split()
+            temp_chunk = ""
+            for word in words:
+                if len(temp_chunk) + len(word) + 1 <= max_length:
+                    temp_chunk += word + " "
+                else:
+                    if temp_chunk:
+                        final_chunks.append(temp_chunk.strip())
+                    temp_chunk = word + " "
+            if temp_chunk:
+                final_chunks.append(temp_chunk.strip())
+    
+    return final_chunks if final_chunks else [text[:max_length]]
 
 def clean_text(text):
     """Clean and normalize text"""
@@ -207,6 +246,18 @@ def clean_text(text):
     text = text.strip()
     return text
 
+def clear_existing_vectors():
+    """Clear existing vectors to avoid duplicates"""
+    try:
+        # Get all vector IDs and delete them
+        stats = index.describe_index_stats()
+        if stats.total_vector_count > 0:
+            logger.info(f"Clearing {stats.total_vector_count} existing vectors...")
+            index.delete(delete_all=True)
+            logger.info("Cleared existing vectors")
+    except Exception as e:
+        logger.warning(f"Error clearing vectors: {e}")
+
 vector_count = 0
 processed_files = []
 categories_used = set()
@@ -214,6 +265,9 @@ categories_used = set()
 print("Starting comprehensive memory synchronization...")
 print(f"Working directory: {os.getcwd()}")
 print(f"Looking for files in: {os.path.abspath('docs')}")
+
+# Clear existing vectors to avoid duplicates
+clear_existing_vectors()
 
 # Process markdown files
 md_files = glob.glob("docs/**/*.md", recursive=True)
@@ -240,7 +294,7 @@ for path in md_files:
             if embedding is None:
                 continue
                 
-            vector_id = f"{path}_{i}" if len(chunks) > 1 else path.replace('/', '_').replace(' ', '_')
+            vector_id = f"md_{os.path.basename(path)}_{i}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             metadata = {
                 "text": chunk,
                 "source": path,
@@ -255,14 +309,26 @@ for path in md_files:
             vector_count += 1
         
         processed_files.append(path)
-        print(f"✓ Processed: {path} ({category})")
+        print(f"✓ Processed: {path} ({category}) - {len(chunks)} chunks")
         
     except Exception as e:
         print(f"✗ Error processing {path}: {e}")
 
-# Process PDF files
-pdf_files = glob.glob("docs/**/*.pdf", recursive=True)
-print(f"Found {len(pdf_files)} PDF files: {pdf_files}")
+# Process PDF files with explicit paths
+pdf_patterns = [
+    "docs/*.pdf",
+    "docs/**/*.pdf"
+]
+
+all_pdf_files = []
+for pattern in pdf_patterns:
+    all_pdf_files.extend(glob.glob(pattern, recursive=True))
+
+# Remove duplicates
+pdf_files = list(set(all_pdf_files))
+print(f"Found {len(pdf_files)} PDF files:")
+for pdf_file in pdf_files:
+    print(f"  - {pdf_file}")
 
 for path in pdf_files:
     try:
@@ -270,9 +336,10 @@ for path in pdf_files:
         txt = extract_pdf_text_advanced(path)
         
         if not txt.strip():
-            print(f"No text extracted from {path}")
+            print(f"❌ No text extracted from {path}")
             continue
             
+        print(f"📄 Extracted {len(txt)} characters from {path}")
         txt = clean_text(txt)
         category = categorize_content(txt, path)
         categories_used.add(category)
@@ -287,7 +354,7 @@ for path in pdf_files:
             if embedding is None:
                 continue
                 
-            vector_id = f"{path}_{i}".replace('/', '_').replace(' ', '_')
+            vector_id = f"pdf_{os.path.basename(path)}_{i}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             metadata = {
                 "text": chunk,
                 "source": path,
@@ -338,7 +405,7 @@ for pattern, extract_func in office_extensions:
                 if embedding is None:
                     continue
                     
-                vector_id = f"{path}_{i}".replace('/', '_').replace(' ', '_')
+                vector_id = f"office_{os.path.basename(path)}_{i}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 metadata = {
                     "text": chunk,
                     "source": path,
@@ -359,7 +426,15 @@ for pattern, extract_func in office_extensions:
             print(f"✗ Error processing {path}: {e}")
 
 # Process images for handwriting recognition
-image_files = glob.glob("docs/**/*.{jpg,jpeg,png,tiff,bmp}", recursive=True)
+image_patterns = [
+    'docs/**/*.jpg', 'docs/**/*.jpeg', 'docs/**/*.png', 
+    'docs/**/*.tiff', 'docs/**/*.bmp'
+]
+
+image_files = []
+for pattern in image_patterns:
+    image_files.extend(glob.glob(pattern, recursive=True))
+
 if image_files:
     print(f"Found {len(image_files)} image files for OCR processing")
     
@@ -379,7 +454,7 @@ if image_files:
             if embedding is None:
                 continue
                 
-            vector_id = path.replace('/', '_').replace(' ', '_')
+            vector_id = f"ocr_{os.path.basename(path)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             metadata = {
                 "text": txt,
                 "source": path,
@@ -402,3 +477,10 @@ print(f"📁 Successfully processed {total_files} files")
 print(f"🧠 Created {vector_count} memory vectors")
 print(f"📂 Categories used: {sorted(categories_used)}")
 print(f"📊 Average vectors per file: {vector_count/total_files if total_files > 0 else 0:.1f}")
+
+# Verify the index has data
+try:
+    stats = index.describe_index_stats()
+    print(f"📈 Total vectors in index: {stats.total_vector_count}")
+except Exception as e:
+    print(f"Error getting index stats: {e}")

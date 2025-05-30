@@ -9,6 +9,7 @@ from openai import OpenAI
 from pinecone import Pinecone
 from pinecone import ServerlessSpec
 from google_calendar import GoogleCalendarManager
+from analytics import PersonalAnalytics
 import json
 import logging
 from datetime import datetime
@@ -50,6 +51,7 @@ app = FastAPI()
 conversation_memory = {}
 calendar_manager = GoogleCalendarManager()
 user_sessions = {}
+analytics = PersonalAnalytics()
 
 # Initialize OCR for handwriting recognition
 try:
@@ -530,6 +532,103 @@ async def add_quick_note(note: dict):
     except Exception as e:
         logger.error(f"Add note error: {e}")
         raise HTTPException(status_code=500, detail=f"Error adding note: {str(e)}")
+
+@app.get("/api/analytics/overview")
+async def get_analytics_overview():
+    """Get comprehensive analytics overview"""
+    try:
+        categories = analytics.get_category_distribution()
+        return {
+            "categories": categories,
+            "total_memories": sum(categories.values()),
+            "top_categories": sorted(categories.items(), key=lambda x: x[1], reverse=True)[:5]
+        }
+    except Exception as e:
+        logger.error(f"Analytics overview error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting analytics: {str(e)}")
+
+@app.get("/api/analytics/personality")
+async def get_personality_analysis():
+    """Get personality insights analysis"""
+    try:
+        insights = analytics.get_personality_insights()
+        return insights
+    except Exception as e:
+        logger.error(f"Personality analysis error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing personality: {str(e)}")
+
+@app.get("/api/analytics/goals")
+async def get_goal_analysis():
+    """Get goal progress analysis"""
+    try:
+        goal_data = analytics.analyze_goal_progress()
+        return goal_data
+    except Exception as e:
+        logger.error(f"Goal analysis error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing goals: {str(e)}")
+
+@app.get("/api/analytics/temporal")
+async def get_temporal_analysis():
+    """Get temporal patterns from journals"""
+    try:
+        temporal_data = analytics.analyze_temporal_patterns()
+        return temporal_data
+    except Exception as e:
+        logger.error(f"Temporal analysis error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing temporal patterns: {str(e)}")
+
+@app.get("/api/analytics/report")
+async def get_comprehensive_report():
+    """Get AI-generated comprehensive analysis report"""
+    try:
+        report = analytics.generate_comprehensive_report()
+        return {"report": report, "generated_at": datetime.now().isoformat()}
+    except Exception as e:
+        logger.error(f"Report generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating report: {str(e)}")
+
+@app.post("/api/smart-search")
+async def smart_search(request: dict):
+    """Enhanced semantic search with context awareness"""
+    try:
+        query = request.get("query", "")
+        category_filter = request.get("category")
+        time_filter = request.get("time_period")  # e.g., "2024", "recent"
+        
+        # Build dynamic filter
+        filter_dict = {}
+        if category_filter and category_filter != "all":
+            filter_dict["category"] = category_filter
+        
+        # Get more comprehensive results
+        results = index.query(
+            vector=embed(query),
+            top_k=50,
+            include_metadata=True,
+            filter=filter_dict if filter_dict else None
+        )
+        
+        # Process and rank results
+        processed_results = []
+        for result in results.matches:
+            if result.score > 0.6:  # Only high-confidence matches
+                processed_results.append({
+                    "text": result.metadata.get("text", ""),
+                    "source": result.metadata.get("source", ""),
+                    "category": result.metadata.get("category", ""),
+                    "score": result.score,
+                    "timestamp": result.metadata.get("timestamp", ""),
+                    "file_type": result.metadata.get("file_type", "")
+                })
+        
+        return {
+            "results": processed_results[:15],  # Top 15 results
+            "total_found": len(processed_results),
+            "categories_found": list(set(r["category"] for r in processed_results))
+        }
+    except Exception as e:
+        logger.error(f"Smart search error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error in smart search: {str(e)}")
 
 # Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")

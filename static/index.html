@@ -6,28 +6,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Michael's AI Companion</title>
     <link rel="manifest" href="/static/manifest.json">
-    <meta name="theme-color" content="#1a1a2e">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="AI Companion">
-    
-    <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
-            --primary-bg: #0f0f23;
-            --secondary-bg: #1a1a2e;
-            --accent-bg: #16213e;
-            --surface-bg: #1e1e2e;
-            --primary-text: #e4e4e7;
-            --secondary-text: #a1a1aa;
-            --accent-color: #3b82f6;
-            --accent-hover: #2563eb;
+            --primary-color: #2563eb;
+            --primary-dark: #1d4ed8;
+            --secondary-color: #64748b;
+            --accent-color: #0ea5e9;
             --success-color: #10b981;
-            --border-color: #374151;
-            --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            
+            --background: #fafafa;
+            --surface: #ffffff;
+            --surface-elevated: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --text-muted: #94a3b8;
+            --border: #e2e8f0;
+            --border-light: #f1f5f9;
+            
             --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
 
         * {
@@ -37,90 +40,160 @@
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, var(--primary-bg) 0%, var(--secondary-bg) 100%);
-            color: var(--primary-text);
-            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
             line-height: 1.6;
         }
 
         .app-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
 
-        .app-header {
-            background: linear-gradient(135deg, var(--accent-bg) 0%, var(--surface-bg) 100%);
-            border-radius: var(--radius);
-            padding: 30px;
-            margin-bottom: 30px;
-            border: 1px solid var(--border-color);
+        .top-nav {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
             box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+            font-weight: bold;
         }
 
         .app-title {
-            font-size: 2.5rem;
+            font-size: 1.5rem;
             font-weight: 700;
-            background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 10px;
+            color: var(--text-primary);
         }
 
-        .app-subtitle {
-            color: var(--secondary-text);
-            font-size: 1.1rem;
-            font-weight: 400;
+        .nav-tabs {
+            display: flex;
+            gap: 1rem;
         }
 
-        .main-grid {
+        .nav-tab {
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            font-weight: 500;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .nav-tab:hover {
+            background: var(--border-light);
+            color: var(--text-primary);
+        }
+
+        .nav-tab.active {
+            color: var(--primary-color);
+            background: rgba(37, 99, 235, 0.1);
+        }
+
+        .nav-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 3px;
+            height: 3px;
+            background: var(--primary-color);
+            border-radius: 50%;
+        }
+
+        .main-content {
+            flex: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+            width: 100%;
             display: grid;
             grid-template-columns: 1fr 300px;
-            gap: 30px;
-            flex: 1;
+            gap: 2rem;
         }
 
-        .chat-section {
-            background: var(--surface-bg);
+        .content-section {
+            display: none;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        .chat-container {
+            background: var(--surface);
             border-radius: var(--radius);
-            border: 1px solid var(--border-color);
             box-shadow: var(--shadow);
+            height: calc(100vh - 160px);
             display: flex;
             flex-direction: column;
-            height: 70vh;
-            overflow: hidden;
         }
 
         .chat-header {
-            padding: 20px;
-            border-bottom: 1px solid var(--border-color);
-            background: var(--accent-bg);
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            border-radius: var(--radius) var(--radius) 0 0;
         }
 
         .chat-title {
-            font-size: 1.2rem;
+            font-size: 1.25rem;
             font-weight: 600;
-            color: var(--primary-text);
+            margin-bottom: 0.5rem;
+        }
+
+        .chat-subtitle {
+            opacity: 0.9;
+            font-size: 0.9rem;
         }
 
         .messages-container {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
-            scroll-behavior: smooth;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
         }
 
         .message {
-            margin-bottom: 20px;
             display: flex;
             flex-direction: column;
             max-width: 85%;
-            animation: fadeIn 0.3s ease-out;
         }
 
         .message.user {
@@ -133,82 +206,104 @@
             align-items: flex-start;
         }
 
+        .message-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
         .message-content {
-            background: var(--accent-bg);
-            padding: 15px 20px;
+            background: var(--surface-elevated);
+            padding: 1rem 1.25rem;
             border-radius: var(--radius);
-            border: 1px solid var(--border-color);
+            border: 1px solid var(--border);
             white-space: pre-wrap;
             word-wrap: break-word;
             position: relative;
+            line-height: 1.6;
         }
 
         .message.user .message-content {
-            background: linear-gradient(135deg, var(--accent-color), #2563eb);
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
             color: white;
-            border-color: var(--accent-color);
+            border-color: var(--primary-color);
         }
 
-        .message-label {
-            font-size: 0.85rem;
-            color: var(--secondary-text);
-            margin-bottom: 5px;
-            font-weight: 500;
+        .message.ai .message-content {
+            background: var(--border-light);
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 1rem 1.5rem;
+            color: var(--text-secondary);
+            font-style: italic;
+            opacity: 0.8;
+        }
+
+        .typing-indicator.active {
+            display: block;
         }
 
         .input-section {
-            padding: 20px;
-            border-top: 1px solid var(--border-color);
-            background: var(--accent-bg);
+            padding: 1.5rem;
+            border-top: 1px solid var(--border);
+            background: var(--surface-elevated);
+            border-radius: 0 0 var(--radius) var(--radius);
         }
 
         .input-container {
             display: flex;
-            gap: 12px;
+            gap: 1rem;
             align-items: flex-end;
         }
 
         .message-input {
             flex: 1;
-            background: var(--surface-bg);
-            border: 1px solid var(--border-color);
+            background: var(--surface);
+            border: 2px solid var(--border);
             border-radius: var(--radius);
-            padding: 15px 20px;
-            color: var(--primary-text);
+            padding: 1rem 1.25rem;
+            color: var(--text-primary);
             font-size: 1rem;
             resize: none;
             min-height: 50px;
-            max-height: 150px;
+            max-height: 120px;
+            transition: border-color 0.2s ease;
             font-family: inherit;
-            transition: all 0.2s ease;
         }
 
         .message-input:focus {
             outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-
-        .message-input::placeholder {
-            color: var(--secondary-text);
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         .send-button {
-            background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
+            background: var(--primary-color);
             color: white;
             border: none;
             border-radius: var(--radius);
-            padding: 15px 25px;
-            font-size: 1rem;
-            font-weight: 600;
+            padding: 1rem 1.5rem;
             cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem;
             transition: all 0.2s ease;
-            min-width: 80px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 100px;
+            justify-content: center;
         }
 
         .send-button:hover:not(:disabled) {
+            background: var(--primary-dark);
             transform: translateY(-1px);
-            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
+            box-shadow: var(--shadow);
         }
 
         .send-button:disabled {
@@ -220,267 +315,407 @@
         .sidebar {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 1.5rem;
         }
 
-        .sidebar-card {
-            background: var(--surface-bg);
+        .widget {
+            background: var(--surface);
             border-radius: var(--radius);
-            border: 1px solid var(--border-color);
             box-shadow: var(--shadow);
             overflow: hidden;
         }
 
-        .card-header {
-            padding: 20px;
-            border-bottom: 1px solid var(--border-color);
-            background: var(--accent-bg);
-        }
-
-        .card-title {
-            font-size: 1.1rem;
+        .widget-header {
+            padding: 1.25rem;
+            background: var(--border-light);
+            border-bottom: 1px solid var(--border);
             font-weight: 600;
-            color: var(--primary-text);
-        }
-
-        .card-content {
-            padding: 20px;
-        }
-
-        .calendar-buttons {
+            color: var(--text-primary);
             display: flex;
-            flex-direction: column;
-            gap: 12px;
+            align-items: center;
+            gap: 0.75rem;
         }
 
-        .calendar-button {
-            background: var(--success-color);
-            color: white;
-            border: none;
-            border-radius: var(--radius);
-            padding: 12px 20px;
-            font-size: 0.95rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-align: center;
-        }
-
-        .calendar-button:hover {
-            background: #059669;
-            transform: translateY(-1px);
-        }
-
-        .calendar-button.secondary {
-            background: var(--accent-color);
-        }
-
-        .calendar-button.secondary:hover {
-            background: var(--accent-hover);
-        }
-
-        .status-indicator {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--success-color);
-            margin-right: 8px;
-        }
-
-        .quick-actions {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+        .widget-content {
+            padding: 1.25rem;
         }
 
         .quick-action {
-            background: transparent;
-            color: var(--secondary-text);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius);
-            padding: 10px 15px;
-            font-size: 0.9rem;
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
             cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
             transition: all 0.2s ease;
             text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
         }
 
         .quick-action:hover {
-            background: var(--accent-bg);
-            color: var(--primary-text);
-            border-color: var(--accent-color);
+            background: var(--border-light);
+            border-color: var(--primary-color);
+            transform: translateY(-1px);
         }
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
+        .quick-action i {
+            color: var(--primary-color);
+            width: 16px;
         }
 
-        .stat-item {
-            text-align: center;
-            padding: 15px;
-            background: var(--accent-bg);
-            border-radius: var(--radius);
-            border: 1px solid var(--border-color);
-        }
-
-        .stat-value {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--accent-color);
-            display: block;
-        }
-
-        .stat-label {
+        .session-info {
+            display: flex;
+            justify-content: space-between;
             font-size: 0.85rem;
-            color: var(--secondary-text);
-            margin-top: 5px;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
         }
 
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
+        .analytics-dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            grid-column: span 2;
+        }
+
+        .analytics-card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+        }
+
+        .analytics-card h3 {
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .chart-container {
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--border-light);
+            border-radius: var(--radius-sm);
+            color: var(--text-secondary);
+        }
+
+        .search-container {
+            margin-bottom: 2rem;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 1rem 1.25rem;
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 1rem;
+            transition: border-color 0.2s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .search-results {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .search-result {
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1.25rem;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .result-category {
+            display: inline-block;
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary-color);
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .result-text {
+            color: var(--text-primary);
+            line-height: 1.6;
+            margin-bottom: 0.75rem;
+        }
+
+        .result-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            color: var(--text-secondary);
+            padding: 2rem;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                padding: 1rem;
             }
-            to {
-                opacity: 1;
-                transform: translateY(0);
+            
+            .analytics-dashboard {
+                grid-column: span 1;
+                grid-template-columns: 1fr;
             }
-        }
-
-        .typing-indicator {
-            display: none;
-            padding: 20px;
-            color: var(--secondary-text);
-            font-style: italic;
-        }
-
-        .typing-indicator.active {
-            display: block;
         }
 
         @media (max-width: 768px) {
-            .main-grid {
-                grid-template-columns: 1fr;
-                gap: 20px;
+            .top-nav {
+                padding: 1rem;
             }
             
-            .app-title {
-                font-size: 2rem;
+            .nav-content {
+                flex-direction: column;
+                gap: 1rem;
             }
             
-            .stats-grid {
-                grid-template-columns: 1fr;
+            .nav-tabs {
+                width: 100%;
+                justify-content: center;
             }
             
-            .chat-section {
-                height: 60vh;
+            .message {
+                max-width: 95%;
             }
         }
     </style>
 </head>
 <body>
     <div class="app-container">
-        <header class="app-header">
-            <h1 class="app-title">Michael's AI Companion</h1>
-            <p class="app-subtitle">Your personal AI assistant that knows you, remembers everything, and helps you achieve your goals.</p>
-        </header>
+        <nav class="top-nav">
+            <div class="nav-content">
+                <div class="logo-section">
+                    <div class="logo">M</div>
+                    <h1 class="app-title">AI Companion</h1>
+                </div>
+                <div class="nav-tabs">
+                    <button class="nav-tab active" onclick="showSection('chat')">
+                        <i class="fas fa-comments"></i> Chat
+                    </button>
+                    <button class="nav-tab" onclick="showSection('analytics')">
+                        <i class="fas fa-chart-bar"></i> Analytics
+                    </button>
+                    <button class="nav-tab" onclick="showSection('search')">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                    <button class="nav-tab" onclick="showSection('calendar')">
+                        <i class="fas fa-calendar"></i> Calendar
+                    </button>
+                </div>
+            </div>
+        </nav>
 
-        <div class="main-grid">
-            <section class="chat-section">
-                <div class="chat-header">
-                    <h2 class="chat-title">Conversation</h2>
-                </div>
-                
-                <div id="messages" class="messages-container">
-                    <div class="message ai">
-                        <div class="message-label">AI Assistant</div>
-                        <div class="message-content">
-                            Hello Michael! I'm your personal AI companion. I have access to your journals, goals, projects, and personal data. I can help you with scheduling, remember important details about your work at Rocket Launch Studio, discuss your reading insights, and support your personal growth journey. What would you like to explore today?
-                        </div>
+        <main class="main-content">
+            <!-- Chat Section -->
+            <div id="chat-section" class="content-section active">
+                <div class="chat-container">
+                    <div class="chat-header">
+                        <h2 class="chat-title">Personal AI Assistant</h2>
+                        <p class="chat-subtitle">Your companion that knows your history, goals, and preferences</p>
                     </div>
-                </div>
-                
-                <div class="typing-indicator" id="typingIndicator">
-                    AI is thinking...
-                </div>
-                
-                <div class="input-section">
-                    <div class="input-container">
-                        <textarea 
-                            id="messageInput" 
-                            class="message-input" 
-                            placeholder="Ask about your goals, schedule a meeting, or anything else..." 
-                            rows="1"></textarea>
-                        <button id="sendButton" class="send-button">Send</button>
-                    </div>
-                </div>
-            </section>
-
-            <aside class="sidebar">
-                <div class="sidebar-card">
-                    <div class="card-header">
-                        <h3 class="card-title">Calendar Integration</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="calendar-buttons">
-                            <button id="connectCalendar" class="calendar-button" onclick="connectCalendar()">
-                                Connect Google Calendar
-                            </button>
-                            <button id="showEvents" class="calendar-button secondary" onclick="showUpcomingEvents()" style="display:none;">
-                                View Upcoming Events
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="sidebar-card">
-                    <div class="card-header">
-                        <h3 class="card-title">Quick Actions</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="quick-actions">
-                            <button class="quick-action" onclick="sendQuickMessage('What are my goals for this month?')">
-                                Review Monthly Goals
-                            </button>
-                            <button class="quick-action" onclick="sendQuickMessage('What did I learn from my recent journal entries?')">
-                                Journal Insights
-                            </button>
-                            <button class="quick-action" onclick="sendQuickMessage('What should I focus on for Rocket Launch Studio?')">
-                                Work Priorities
-                            </button>
-                            <button class="quick-action" onclick="sendQuickMessage('Schedule time for creative work this week')">
-                                Plan Creative Time
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="sidebar-card">
-                    <div class="card-header">
-                        <h3 class="card-title">System Status</h3>
-                    </div>
-                    <div class="card-content">
-                        <div class="stats-grid">
-                            <div class="stat-item">
-                                <span class="stat-value" id="memoryCount">-</span>
-                                <div class="stat-label">Memories</div>
+                    
+                    <div id="messages" class="messages-container">
+                        <div class="message ai">
+                            <div class="message-label">
+                                <i class="fas fa-robot"></i> AI Assistant
                             </div>
-                            <div class="stat-item">
-                                <span class="stat-value" id="sessionLength">0</span>
-                                <div class="stat-label">Messages</div>
+                            <div class="message-content">
+                                Hello Michael! I'm your enhanced personal AI companion. I now have access to all your journals (2022-2025), personality assessments, work at Rocket Launch Studio, books you've read, and much more. I can help you with scheduling, analyze patterns in your data, provide insights on your goals, and support your personal growth journey. What would you like to explore today?
                             </div>
                         </div>
-                        <div style="margin-top: 15px; font-size: 0.9rem; color: var(--secondary-text);">
-                            <span class="status-indicator"></span>
-                            All systems operational
+                    </div>
+                    
+                    <div class="typing-indicator" id="typingIndicator">
+                        <i class="fas fa-circle-notch fa-spin"></i> AI is thinking...
+                    </div>
+                    
+                    <div class="input-section">
+                        <div class="input-container">
+                            <textarea 
+                                id="messageInput" 
+                                class="message-input" 
+                                placeholder="Ask about your journals, goals, insights, or anything else..."
+                                rows="1"
+                            ></textarea>
+                            <button id="sendButton" class="send-button">
+                                <i class="fas fa-paper-plane"></i>
+                                Send
+                            </button>
                         </div>
                     </div>
                 </div>
-            </aside>
-        </div>
+            </div>
+
+            <!-- Analytics Section -->
+            <div id="analytics-section" class="content-section">
+                <div class="analytics-dashboard">
+                    <div class="analytics-card">
+                        <h3><i class="fas fa-chart-pie"></i> Content Overview</h3>
+                        <div id="contentOverview" class="chart-container">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                Loading content analysis...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <h3><i class="fas fa-user"></i> Personality Insights</h3>
+                        <div id="personalityInsights" class="chart-container">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                Analyzing personality data...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <h3><i class="fas fa-target"></i> Goal Progress</h3>
+                        <div id="goalProgress" class="chart-container">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                Tracking goal progress...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <h3><i class="fas fa-clock"></i> Temporal Patterns</h3>
+                        <div id="temporalPatterns" class="chart-container">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                Analyzing journal patterns...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-card" style="grid-column: span 2;">
+                        <h3><i class="fas fa-file-alt"></i> AI-Generated Report</h3>
+                        <div id="comprehensiveReport" class="chart-container">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                Generating comprehensive analysis...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search Section -->
+            <div id="search-section" class="content-section">
+                <div class="search-container">
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        class="search-input" 
+                        placeholder="Search through your journals, goals, projects, and more..."
+                    >
+                </div>
+                <div id="searchResults" class="search-results"></div>
+            </div>
+
+            <!-- Calendar Section -->
+            <div id="calendar-section" class="content-section">
+                <div class="widget">
+                    <div class="widget-header">
+                        <i class="fas fa-calendar"></i>
+                        Google Calendar Integration
+                    </div>
+                    <div class="widget-content">
+                        <button onclick="connectCalendar()" class="quick-action">
+                            <i class="fas fa-link"></i>
+                            Connect Google Calendar
+                        </button>
+                        <div id="calendarEvents"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar (only shown in chat view) -->
+            <div class="sidebar" id="sidebar">
+                <div class="widget">
+                    <div class="widget-header">
+                        <i class="fas fa-bolt"></i>
+                        Quick Actions
+                    </div>
+                    <div class="widget-content" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                        <button class="quick-action" onclick="quickMessage('What are my current goals?')">
+                            <i class="fas fa-bullseye"></i>
+                            Review Goals
+                        </button>
+                        <button class="quick-action" onclick="quickMessage('What insights from my recent journals?')">
+                            <i class="fas fa-book"></i>
+                            Journal Insights
+                        </button>
+                        <button class="quick-action" onclick="quickMessage('Analyze my personality patterns')">
+                            <i class="fas fa-user-circle"></i>
+                            Personality Analysis
+                        </button>
+                        <button class="quick-action" onclick="quickMessage('What did I learn from the books I read?')">
+                            <i class="fas fa-graduation-cap"></i>
+                            Book Learnings
+                        </button>
+                        <button class="quick-action" onclick="quickMessage('Help me plan my day')">
+                            <i class="fas fa-calendar-day"></i>
+                            Plan Day
+                        </button>
+                    </div>
+                </div>
+
+                <div class="widget">
+                    <div class="widget-header">
+                        <i class="fas fa-info-circle"></i>
+                        Session Info
+                    </div>
+                    <div class="widget-content">
+                        <div class="session-info">
+                            <span>Messages: <span id="sessionLength">0</span></span>
+                            <span>Status: <span id="sessionStatus">Active</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
 
     <script>
@@ -488,7 +723,9 @@
         const messageInput = document.getElementById('messageInput');
         const sendButton = document.getElementById('sendButton');
         const typingIndicator = document.getElementById('typingIndicator');
+        const searchInput = document.getElementById('searchInput');
         let messageCount = 0;
+        let currentSection = 'chat';
 
         // Auto-resize textarea
         messageInput.addEventListener('input', function() {
@@ -496,13 +733,278 @@
             this.style.height = Math.min(this.scrollHeight, 150) + 'px';
         });
 
+        // Enter key handling
+        messageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Search input handling
+        searchInput.addEventListener('input', debounce(performSearch, 500));
+
+        function showSection(section) {
+            // Update nav tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+            event.target.closest('.nav-tab').classList.add('active');
+            
+            // Update content sections
+            document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
+            document.getElementById(section + '-section').classList.add('active');
+            
+            // Show/hide sidebar
+            const sidebar = document.getElementById('sidebar');
+            if (section === 'chat') {
+                sidebar.style.display = 'flex';
+                document.querySelector('.main-content').style.gridTemplateColumns = '1fr 300px';
+            } else {
+                sidebar.style.display = 'none';
+                document.querySelector('.main-content').style.gridTemplateColumns = '1fr';
+            }
+            
+            currentSection = section;
+            
+            // Load section-specific data
+            if (section === 'analytics') {
+                loadAnalytics();
+            }
+        }
+
+        async function loadAnalytics() {
+            try {
+                // Load overview
+                const overviewResponse = await fetch('/api/analytics/overview');
+                const overview = await overviewResponse.json();
+                displayContentOverview(overview);
+                
+                // Load personality insights
+                const personalityResponse = await fetch('/api/analytics/personality');
+                const personality = await personalityResponse.json();
+                displayPersonalityInsights(personality);
+                
+                // Load goal analysis
+                const goalsResponse = await fetch('/api/analytics/goals');
+                const goals = await goalsResponse.json();
+                displayGoalProgress(goals);
+                
+                // Load temporal patterns
+                const temporalResponse = await fetch('/api/analytics/temporal');
+                const temporal = await temporalResponse.json();
+                displayTemporalPatterns(temporal);
+                
+                // Load comprehensive report
+                const reportResponse = await fetch('/api/analytics/report');
+                const report = await reportResponse.json();
+                displayComprehensiveReport(report);
+                
+            } catch (error) {
+                console.error('Error loading analytics:', error);
+            }
+        }
+
+        function displayContentOverview(data) {
+            const container = document.getElementById('contentOverview');
+            const categories = data.categories || {};
+            
+            let html = '<div style="text-align: left; height: 100%; overflow-y: auto; padding: 1rem;">';
+            html += `<p style="margin-bottom: 1rem; color: var(--text-secondary);">Total: ${data.total_memories || 0} memories</p>`;
+            
+            for (const [category, count] of Object.entries(categories)) {
+                const percentage = ((count / data.total_memories) * 100).toFixed(1);
+                html += `
+                    <div style="margin-bottom: 0.75rem;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+                            <span style="font-weight: 500; color: var(--text-primary);">${category.replace(/_/g, ' ')}</span>
+                            <span style="color: var(--text-secondary);">${count} (${percentage}%)</span>
+                        </div>
+                        <div style="background: var(--border); height: 6px; border-radius: 3px; overflow: hidden;">
+                            <div style="background: var(--primary-color); height: 100%; width: ${percentage}%; border-radius: 3px;"></div>
+                        </div>
+                    </div>
+                `;
+            }
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function displayPersonalityInsights(data) {
+            const container = document.getElementById('personalityInsights');
+            const insights = data.insights || [];
+            
+            let html = '<div style="text-align: left; height: 100%; overflow-y: auto; padding: 1rem;">';
+            
+            if (insights.length > 0) {
+                insights.slice(0, 3).forEach(insight => {
+                    html += `
+                        <div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--surface); border-radius: var(--radius-sm); border-left: 3px solid var(--primary-color);">
+                            <p style="font-size: 0.9rem; line-height: 1.5; color: var(--text-primary);">${insight.text.substring(0, 150)}...</p>
+                            <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">Relevance: ${(insight.relevance * 100).toFixed(1)}%</p>
+                        </div>
+                    `;
+                });
+            } else {
+                html += '<p style="color: var(--text-secondary);">No personality insights found. Try processing your personality assessment documents.</p>';
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function displayGoalProgress(data) {
+            const container = document.getElementById('goalProgress');
+            
+            let html = '<div style="text-align: left; height: 100%; overflow-y: auto; padding: 1rem;">';
+            
+            const goals = data.mentioned_goals || [];
+            const achievements = data.achievements || [];
+            const challenges = data.challenges || [];
+            
+            html += `
+                <div style="margin-bottom: 1rem;">
+                    <h4 style="color: var(--success-color); margin-bottom: 0.5rem;">
+                        <i class="fas fa-trophy"></i> Achievements (${achievements.length})
+                    </h4>
+                    ${achievements.slice(0, 2).map(item => `
+                        <p style="font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-primary);">${item.text.substring(0, 100)}...</p>
+                    `).join('')}
+                </div>
+                
+                <div style="margin-bottom: 1rem;">
+                    <h4 style="color: var(--warning-color); margin-bottom: 0.5rem;">
+                        <i class="fas fa-exclamation-triangle"></i> Challenges (${challenges.length})
+                    </h4>
+                    ${challenges.slice(0, 2).map(item => `
+                        <p style="font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-primary);">${item.text.substring(0, 100)}...</p>
+                    `).join('')}
+                </div>
+                
+                <div>
+                    <h4 style="color: var(--primary-color); margin-bottom: 0.5rem;">
+                        <i class="fas fa-bullseye"></i> Goals (${goals.length})
+                    </h4>
+                    ${goals.slice(0, 2).map(item => `
+                        <p style="font-size: 0.85rem; margin-bottom: 0.5rem; color: var(--text-primary);">${item.text.substring(0, 100)}...</p>
+                    `).join('')}
+                </div>
+            `;
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function displayTemporalPatterns(data) {
+            const container = document.getElementById('temporalPatterns');
+            
+            let html = '<div style="text-align: left; height: 100%; overflow-y: auto; padding: 1rem;">';
+            
+            for (const [year, entries] of Object.entries(data)) {
+                const avgMood = entries.reduce((sum, entry) => sum + entry.mood_score, 0) / entries.length;
+                const moodColor = avgMood > 0 ? 'var(--success-color)' : avgMood < 0 ? 'var(--error-color)' : 'var(--warning-color)';
+                
+                html += `
+                    <div style="margin-bottom: 1.5rem;">
+                        <h4 style="color: var(--text-primary); margin-bottom: 0.75rem;">
+                            ${year} 
+                            <span style="color: ${moodColor}; font-size: 0.8rem;">
+                                (Mood: ${avgMood > 0 ? 'Positive' : avgMood < 0 ? 'Challenging' : 'Neutral'})
+                            </span>
+                        </h4>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                            ${entries.length} journal entries analyzed
+                        </p>
+                        ${entries.slice(0, 1).map(entry => `
+                            <p style="font-size: 0.8rem; color: var(--text-primary); line-height: 1.4;">
+                                "${entry.text_snippet.substring(0, 120)}..."
+                            </p>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function displayComprehensiveReport(data) {
+            const container = document.getElementById('comprehensiveReport');
+            
+            const html = `
+                <div style="text-align: left; height: 100%; overflow-y: auto; padding: 1rem;">
+                    <div style="white-space: pre-wrap; line-height: 1.6; color: var(--text-primary);">
+                        ${data.report || 'Report generation failed. Please try again.'}
+                    </div>
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: 0.85rem;">
+                        Generated: ${new Date(data.generated_at).toLocaleString()}
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+
+        async function performSearch() {
+            const query = searchInput.value.trim();
+            const resultsContainer = document.getElementById('searchResults');
+            
+            if (!query) {
+                resultsContainer.innerHTML = '';
+                return;
+            }
+            
+            resultsContainer.innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
+            
+            try {
+                const response = await fetch('/api/smart-search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: query })
+                });
+                
+                const data = await response.json();
+                displaySearchResults(data);
+            } catch (error) {
+                console.error('Search error:', error);
+                resultsContainer.innerHTML = '<div style="color: var(--error-color); text-align: center; padding: 2rem;">Search failed. Please try again.</div>';
+            }
+        }
+
+        function displaySearchResults(data) {
+            const container = document.getElementById('searchResults');
+            const results = data.results || [];
+            
+            if (results.length === 0) {
+                container.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 2rem;">No results found.</div>';
+                return;
+            }
+            
+            let html = `<div style="margin-bottom: 1rem; color: var(--text-secondary);">Found ${results.length} results from ${data.categories_found.length} categories</div>`;
+            
+            results.forEach(result => {
+                html += `
+                    <div class="search-result">
+                        <div class="result-category">${result.category.replace(/_/g, ' ')}</div>
+                        <div class="result-text">${result.text}</div>
+                        <div class="result-meta">
+                            <span>${result.source}</span>
+                            <span>Relevance: ${(result.score * 100).toFixed(1)}%</span>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
         function addMessage(content, isUser = false) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isUser ? 'user' : 'ai'}`;
             
             const label = document.createElement('div');
             label.className = 'message-label';
-            label.textContent = isUser ? 'You' : 'AI Assistant';
+            label.innerHTML = isUser ? '<i class="fas fa-user"></i> You' : '<i class="fas fa-robot"></i> AI Assistant';
             
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
@@ -526,28 +1028,26 @@
             typingIndicator.classList.remove('active');
         }
 
-        async function sendMessage(message = null) {
-            const content = message || messageInput.value.trim();
-            if (!content) return;
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
 
-            addMessage(content, true);
-            if (!message) {
-                messageInput.value = '';
-                messageInput.style.height = 'auto';
-            }
-            
+            addMessage(message, true);
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
             sendButton.disabled = true;
-            sendButton.textContent = 'Sending...';
             showTyping();
 
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        message: content,
-                        session_id: 'michael_session'
-                    }),
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        session_id: 'default'
+                    })
                 });
 
                 const data = await response.json();
@@ -555,73 +1055,37 @@
                 addMessage(data.response);
             } catch (error) {
                 hideTyping();
-                addMessage('I apologize, but I encountered an error processing your request. Please try again.');
+                addMessage('Sorry, I encountered an error. Please try again.');
                 console.error('Chat error:', error);
+            } finally {
+                sendButton.disabled = false;
             }
-
-            sendButton.disabled = false;
-            sendButton.textContent = 'Send';
         }
 
-        function sendQuickMessage(message) {
-            sendMessage(message);
+        function quickMessage(message) {
+            messageInput.value = message;
+            sendMessage();
         }
-
-        sendButton.addEventListener('click', () => sendMessage());
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
 
         async function connectCalendar() {
             window.location.href = '/auth/google';
         }
 
-        async function showUpcomingEvents() {
-            try {
-                const response = await fetch('/api/upcoming-events');
-                const data = await response.json();
-                
-                if (data.auth_required) {
-                    addMessage('Please connect your Google Calendar first.');
-                    return;
-                }
-
-                if (data.events.length === 0) {
-                    addMessage('No upcoming events found in your calendar.');
-                } else {
-                    let eventsText = 'Here are your upcoming events:\n\n';
-                    data.events.forEach((event, index) => {
-                        const date = new Date(event.start).toLocaleString();
-                        eventsText += `${index + 1}. ${event.summary}\n   ${date}\n`;
-                        if (event.location) eventsText += `   Location: ${event.location}\n`;
-                        eventsText += '\n';
-                    });
-                    addMessage(eventsText);
-                }
-            } catch (error) {
-                addMessage('Error fetching calendar events. Please try again.');
-            }
+        function debounce(func, delay) {
+            let timeoutId;
+            return function (...args) {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => func.apply(this, args), delay);
+            };
         }
 
-        // Check authentication status on load
-        window.addEventListener('load', async () => {
-            try {
-                const response = await fetch('/api/upcoming-events');
-                const data = await response.json();
-                if (!data.auth_required) {
-                    document.getElementById('connectCalendar').style.display = 'none';
-                    document.getElementById('showEvents').style.display = 'block';
-                }
-            } catch (error) {
-                console.log('Calendar not connected yet');
-            }
-
-            // Load memory count (placeholder - you can implement this endpoint)
-            document.getElementById('memoryCount').textContent = '1.2K';
-        });
+        // Initialize
+        sendButton.addEventListener('click', sendMessage);
+        
+        // Load initial analytics if on analytics tab
+        if (currentSection === 'analytics') {
+            loadAnalytics();
+        }
     </script>
 </body>
 </html>

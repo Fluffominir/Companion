@@ -18,3 +18,7 @@ Pillow
 pytesseract
 python-docx
 python-pptx
+matplotlib
+pandas
+seaborn
+numpy
