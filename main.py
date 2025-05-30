@@ -10,6 +10,9 @@ from pinecone import Pinecone
 from pinecone import ServerlessSpec
 from google_calendar import GoogleCalendarManager
 from analytics import PersonalAnalytics
+from integrations import IntegrationsManager
+from voice_handler import VoiceHandler
+from daily_insights import DailyInsightsManager
 import json
 import logging
 from datetime import datetime
@@ -52,6 +55,9 @@ conversation_memory = {}
 calendar_manager = GoogleCalendarManager()
 user_sessions = {}
 analytics = PersonalAnalytics()
+integrations = IntegrationsManager()
+voice_handler = VoiceHandler()
+insights_manager = DailyInsightsManager()
 
 # Initialize OCR for handwriting recognition
 try:
@@ -587,6 +593,74 @@ async def get_comprehensive_report():
         logger.error(f"Report generation error: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating report: {str(e)}")
 
+@app.post("/api/voice/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    """Transcribe audio to text using Whisper"""
+    try:
+        audio_content = await file.read()
+        result = voice_handler.process_voice_message(audio_content)
+        return result
+    except Exception as e:
+        logger.error(f"Voice transcription error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error transcribing audio: {str(e)}")
+
+@app.post("/api/voice/synthesize")
+async def synthesize_speech(request: dict):
+    """Convert text to speech"""
+    try:
+        text = request.get("text", "")
+        voice = request.get("voice", "alloy")
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="Text is required")
+        
+        audio_content = voice_handler.generate_voice_response(text, voice)
+        
+        # Return audio as base64 for web playback
+        import base64
+        audio_b64 = base64.b64encode(audio_content).decode()
+        
+        return {
+            "audio_data": audio_b64,
+            "content_type": "audio/mpeg"
+        }
+    except Exception as e:
+        logger.error(f"Speech synthesis error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error synthesizing speech: {str(e)}")
+
+@app.post("/api/voice/chat")
+async def voice_chat(file: UploadFile = File(...), session_id: str = "default"):
+    """Complete voice interaction - transcribe, process, and respond with voice"""
+    try:
+        # Transcribe audio
+        audio_content = await file.read()
+        transcription_result = voice_handler.process_voice_message(audio_content)
+        
+        if "error" in transcription_result:
+            return transcription_result
+        
+        transcribed_text = transcription_result["transcribed_text"]
+        
+        # Process through chat system
+        chat_request = ChatRequest(message=transcribed_text, session_id=session_id)
+        chat_response = await chat(chat_request)
+        
+        # Generate voice response
+        audio_response = voice_handler.generate_voice_response(chat_response["response"])
+        
+        import base64
+        audio_b64 = base64.b64encode(audio_response).decode()
+        
+        return {
+            "transcribed_text": transcribed_text,
+            "text_response": chat_response["response"],
+            "audio_response": audio_b64,
+            "content_type": "audio/mpeg"
+        }
+    except Exception as e:
+        logger.error(f"Voice chat error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error in voice chat: {str(e)}")
+
 @app.post("/api/smart-search")
 async def smart_search(request: dict):
     """Enhanced semantic search with context awareness"""
@@ -629,6 +703,159 @@ async def smart_search(request: dict):
     except Exception as e:
         logger.error(f"Smart search error: {e}")
         raise HTTPException(status_code=500, detail=f"Error in smart search: {str(e)}")
+
+@app.get("/api/daily-briefing")
+async def get_daily_briefing():
+    """Get comprehensive daily briefing with insights and reminders"""
+    try:
+        briefing = insights_manager.generate_daily_briefing()
+        return briefing
+    except Exception as e:
+        logger.error(f"Daily briefing error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating daily briefing: {str(e)}")
+
+@app.post("/api/daily-reflection")
+async def add_daily_reflection(reflection: dict):
+    """Store daily reflection"""
+    try:
+        text = reflection.get("text", "")
+        mood = reflection.get("mood_score", 5)
+        energy = reflection.get("energy_level", 5)
+        
+        result = insights_manager.store_daily_reflection(text, mood, energy)
+        return result
+    except Exception as e:
+        logger.error(f"Daily reflection error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error storing reflection: {str(e)}")
+
+@app.get("/api/integrations/spotify")
+async def get_spotify_data():
+    """Get Spotify listening data and insights"""
+    try:
+        data = integrations.get_spotify_data()
+        return data
+    except Exception as e:
+        logger.error(f"Spotify integration error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting Spotify data: {str(e)}")
+
+@app.get("/api/integrations/hue")
+async def get_hue_data():
+    """Get Philips Hue lights and environment data"""
+    try:
+        data = integrations.get_hue_data()
+        return data
+    except Exception as e:
+        logger.error(f"Hue integration error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting Hue data: {str(e)}")
+
+@app.get("/api/integrations/nas/scan")
+async def scan_nas_files():
+    """Scan NAS for files"""
+    try:
+        files = integrations.scan_nas_files()
+        return {"files": files, "count": len(files)}
+    except Exception as e:
+        logger.error(f"NAS scan error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error scanning NAS: {str(e)}")
+
+@app.post("/api/integrations/nas/process")
+async def process_nas_file(request: dict):
+    """Process a file from NAS and add to memory"""
+    try:
+        file_path = request.get("file_path")
+        if not file_path:
+            raise HTTPException(status_code=400, detail="file_path is required")
+        
+        content = integrations.process_nas_file(file_path)
+        if not content:
+            return {"error": "Could not extract content from file"}
+        
+        # Add to memory system
+        from scripts.boot_memory import categorize_content, chunk_text, clean_text
+        
+        content = clean_text(content)
+        category = categorize_content(content, os.path.basename(file_path))
+        chunks = chunk_text(content)
+        
+        vector_count = 0
+        for i, chunk in enumerate(chunks):
+            if chunk.strip():
+                embedding = embed(chunk)
+                if embedding:
+                    vector_id = f"nas_{os.path.basename(file_path)}_{i}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                    metadata = {
+                        "text": chunk,
+                        "source": f"nas_{os.path.basename(file_path)}",
+                        "category": category,
+                        "chunk_index": i,
+                        "total_chunks": len(chunks),
+                        "timestamp": datetime.now().isoformat(),
+                        "file_type": "nas_file",
+                        "original_path": file_path
+                    }
+                    index.upsert([(vector_id, embedding, metadata)])
+                    vector_count += 1
+        
+        return {
+            "message": f"Successfully processed {os.path.basename(file_path)}",
+            "category": category,
+            "chunks_created": vector_count,
+            "content_preview": content[:200] + "..." if len(content) > 200 else content
+        }
+        
+    except Exception as e:
+        logger.error(f"NAS file processing error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing NAS file: {str(e)}")
+
+@app.post("/api/integrations/health/import")
+async def import_health_data(file: UploadFile = File(...)):
+    """Import Apple Health export data"""
+    try:
+        # Save uploaded health export
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_path = temp_file.name
+        
+        # Parse health data
+        health_data = integrations.parse_apple_health_export(temp_path)
+        
+        # Clean up temp file
+        os.unlink(temp_path)
+        
+        if "error" in health_data:
+            return health_data
+        
+        # Store health insights in memory
+        health_summary = f"""Health Data Summary:
+Steps: {len(health_data.get('steps', []))} records
+Heart Rate: {len(health_data.get('heart_rate', []))} records  
+Workouts: {len(health_data.get('workouts', []))} records
+Sleep: {len(health_data.get('sleep', []))} records
+Weight: {len(health_data.get('weight', []))} records
+"""
+        
+        vector_id = f"health_import_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        metadata = {
+            "text": health_summary,
+            "source": "apple_health_import",
+            "category": "health",
+            "timestamp": datetime.now().isoformat(),
+            "file_type": "health_data",
+            "data": json.dumps(health_data)
+        }
+        
+        index.upsert([(vector_id, embed(health_summary), metadata)])
+        
+        return {
+            "message": "Health data imported successfully",
+            "summary": health_data,
+            "records_processed": sum(len(health_data.get(key, [])) for key in health_data.keys())
+        }
+        
+    except Exception as e:
+        logger.error(f"Health import error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error importing health data: {str(e)}")
 
 # Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
