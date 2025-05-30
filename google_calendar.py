@@ -1,4 +1,3 @@
-
 import os
 import json
 from datetime import datetime, timedelta
@@ -17,7 +16,10 @@ class GoogleCalendarManager:
                 self.client_config = json.load(f)
         else:
             raise FileNotFoundError(f"Google credentials file not found at {credentials_path}")
-        
+
+        self.client_id = "343105907066-lfufef3jo7vk0vdokurifst8rfp94lon.apps.googleusercontent.com"
+        self.client_secret = "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"
+
         self.scopes = [
             'https://www.googleapis.com/auth/calendar.readonly',
             'https://www.googleapis.com/auth/calendar.events',
@@ -27,7 +29,7 @@ class GoogleCalendarManager:
             'https://www.googleapis.com/auth/userinfo.email',
             'https://www.googleapis.com/auth/userinfo.profile'
         ]
-        
+
     def create_auth_flow(self, redirect_uri):
         """Create OAuth flow for calendar access"""
         flow = Flow.from_client_config(
@@ -36,12 +38,12 @@ class GoogleCalendarManager:
         )
         flow.redirect_uri = redirect_uri
         return flow
-    
+
     def get_calendar_service(self, credentials_dict):
         """Create calendar service with user credentials"""
         credentials = Credentials.from_authorized_user_info(credentials_dict)
         return build('calendar', 'v3', credentials=credentials)
-    
+
     def get_upcoming_events(self, service, max_results=10):
         """Get upcoming calendar events"""
         try:
@@ -54,7 +56,7 @@ class GoogleCalendarManager:
                 orderBy='startTime'
             ).execute()
             events = events_result.get('items', [])
-            
+
             formatted_events = []
             for event in events:
                 start = event['start'].get('dateTime', event['start'].get('date'))
@@ -64,12 +66,12 @@ class GoogleCalendarManager:
                     'description': event.get('description', ''),
                     'location': event.get('location', '')
                 })
-            
+
             return formatted_events
         except HttpError as error:
             print(f'An error occurred: {error}')
             return []
-    
+
     def create_event(self, service, event_data):
         """Create a new calendar event"""
         try:

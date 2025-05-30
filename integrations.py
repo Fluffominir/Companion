@@ -233,38 +233,166 @@ class IntegrationsManager:
             return []
 
         try:
-            # Use smbclient to list files
-            share = share_name or "home"  # Default share
-            cmd = f"smbclient //{self.nas_host}/{share} -U {self.nas_username}%{self.nas_password} -c 'recurse;ls'"
+            from smbprotocol.connection import Connection
+            from smbprotocol.session import Session
+            from smbprotocol.tree import TreeConnect
+            from smbprotocol.open import Open, CreateDisposition, ImpersonationLevel, CreateOptions
+            from smbprotocol.file_info import FileInformationClass
+            import socket
 
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            # Use smbprotocol for better compatibility
+            connection = Connection(socket.gethostbyname(self.nas_host), 445)
+            connection.connect()
 
-            if result.returncode == 0:
-                files = []
-                for line in result.stdout.split('\n'):
-                    if line.strip() and not line.startswith('  .') and 'D' not in line:
-                        # Parse file listing
-                        parts = line.strip().split()
-                        if len(parts) >= 4:
-                            filename = ' '.join(parts[:-3])
-                            size = parts[-3]
-                            date_str = ' '.join(parts[-2:])
+            session = Session(connection, self.nas_username, self.nas_password)
+            session.connect()
 
-                            files.append({
-                                "name": filename,
-                                "size": size,
-                                "modified": date_str,
-                                "path": f"//{self.nas_host}/{share}/{filename}"
-                            })
+            share = share_name or "homes"  # Default to homes share
+            tree = TreeConnect(session, f"\\\\{self.nas_host}\\{share}")
+            tree.connect()
 
-                return files[:100]  # Limit results
-            else:
-                logger.error(f"NAS scan failed: {result.stderr}")
-                return []
+            # List files in root directory
+            files = []
+            root_dir = Open(tree, "")
+            try:
+                root_dir.create(
+                    ImpersonationLevel.Impersonation,
+                    CreateOptions.FILE_DIRECTORY_FILE,
+                    CreateDisposition.FILE_OPEN
+                )
+
+                for file_info in root_dir.query_directory("*", FileInformationClass.FILE_DIRECTORY_INFORMATION):
+                    if not file_info.file_name.startswith('.'):
+                        files.append({
+                            "name": file_info.file_name,
+                            "size": file_info.end_of_file,
+                            "modified": file_info.last_write_time.isoformat(),
+                            "is_directory": bool(file_info.file_attributes & 0x10),
+                            "path": f"//{self.nas_host}/{share}/{file_info.file_name}"
+                        })
+
+                root_dir.close()
+            except Exception as e:
+                logger.error(f"Directory listing error: {e}")
+
+            tree.disconnect()
+            session.disconnect()
+            connection.disconnect()
+
+            return files[:50]  # Limit results
 
         except Exception as e:
-            logger.error(f"NAS scan error: {e}")
-            return []
+            logger.error(f"SMB protocol error: {e}")
+            # Fallback to smbclient if available
+            try:
+                share = share_name or "homes"
+                cmd = f"smbclient '//{self.nas_host}/{share}' -U '{self.nas_username}%{self.nas_password}' -c 'ls'"
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+
+                if result.returncode == 0:
+                    files = []
+                    for line in result.stdout.split('\n'):
+                        if line.strip() and not line.startswith('  .') and not line.startswith('NT_'):
+                            parts = line.strip().split()
+                            if len(parts) >= 2:
+                                filename = ' '.join(parts[:-1]) if len(parts) > 2 else parts[0]
+                                files.append({
+                                    "name": filename,
+                                    "size": "unknown",
+                                    "modified": "unknown",
+                                    "path": f"//{self.nas_host}/{share}/{filename}"
+                                })
+                    return files[:50]
+                else:
+                    logger.error(f"smbclient fallback failed: {result.stderr}")
+                    return []
+            except Exception as fallback_error:
+                logger.error(f"Fallback error: {fallback_error}")
+                return []
+
+    def process_nas_file(self, file_path: str) -> str:
+        """Download and process a file from NAS"""
+        try:
+            import tempfile
+            from smbprotocol.connection import Connection
+            from smbprotocol.session import Session
+            from smbprotocol.tree import TreeConnect
+            from smbprotocol.open import Open, CreateDisposition, ImpersonationLevel
+            import socket
+
+            # Parse file path
+            parts = file_path.replace('//', '').split('/')
+            host = parts[0]
+            share = parts[1]
+            file_name = '/'.join(parts[2:])
+
+            # Connect to NAS
+            connection = Connection(socket.gethostbyname(host), 445)
+            connection.connect()
+
+            session = Session(connection, self.nas_username, self.nas_password)
+            session.connect()
+
+            tree = TreeConnect(session, f"\\\\{host}\\{share}")
+            tree.connect()
+
+            # Open and read file
+            file_open = Open(tree, file_name)
+            file_open.create(
+                ImpersonationLevel.Impersonation,
+                CreateDisposition.FILE_OPEN
+            )
+
+            # Read file content
+            file_content = file_open.read(0, file_open.end_of_file)
+            file_open.close()
+
+            tree.disconnect()
+            session.disconnect()
+            connection.disconnect()
+
+            # Process based on file type
+            file_ext = file_name.lower().split('.')[-1]
+            
+            if file_ext == 'pdf':
+                # Save temporarily and extract text
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                    temp_file.write(file_content)
+                    temp_path = temp_file.name
+
+                import pdfplumber
+                text_content = ""
+                with pdfplumber.open(temp_path) as pdf:
+                    for page in pdf.pages:
+                        page_text = page.extract_text()
+                        if page_text:
+                            text_content += page_text + "\n"
+                
+                os.unlink(temp_path)
+                return text_content
+
+            elif file_ext in ['txt', 'md', 'log']:
+                return file_content.decode('utf-8', errors='ignore')
+            
+            elif file_ext in ['docx']:
+                # Handle Word documents
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as temp_file:
+                    temp_file.write(file_content)
+                    temp_path = temp_file.name
+
+                from docx import Document
+                doc = Document(temp_path)
+                text_content = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+                
+                os.unlink(temp_path)
+                return text_content
+
+            else:
+                return f"File type {file_ext} not supported for content extraction"
+
+        except Exception as e:
+            logger.error(f"NAS file processing error: {e}")
+            return ""
 
     # Apple Health Integration (existing code)
     def parse_apple_health_export(self, export_path: str) -> Dict[str, Any]:
@@ -300,13 +428,13 @@ class IntegrationsManager:
                     })
                 elif 'HeartRate' in record_type:
                     health_data["heart_rate"].append({
-                        "value": float(value)),
+                        "value": float(value),
                         "date": start_date,
                         "unit": record.get('unit', 'bpm')
                     })
                 elif 'BodyMass' in record_type:
                     health_data["weight"].append({
-                        "value": float(value)),
+                        "value": float(value),
                         "date": start_date,
                         "unit": record.get('unit', 'kg')
                     })

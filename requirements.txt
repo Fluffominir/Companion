@@ -34,3 +34,7 @@ pdfplumber
 python-dotenv
 requests
 seaborn
+python-docx
+smbprotocol
+python-docx
+smbprotocol
