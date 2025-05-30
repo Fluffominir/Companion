@@ -10,3 +10,11 @@ google-auth-httplib2
 google-api-python-client
 google-auth
 pypdf
+easyocr
+opencv-python
+openpyxl
+pdfplumber
+Pillow
+pytesseract
+python-docx
+python-pptx

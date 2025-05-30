@@ -3,7 +3,8 @@ entrypoint = "main.py"
 modules = ["python-3.11"]
 
 [nix]
-packages = ["cargo", "libiconv", "libxcrypt", "rustc"]
+packages = ["cargo", "freetype", "hdf5", "lcms2", "libGL", "libGLU", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "rustc", "tcl", "tesseract", "tk", "zlib"]
+channel = "stable-24_05"
 
 [[ports]]
 localPort = 8000
