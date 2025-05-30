@@ -80,23 +80,37 @@ def format_memory_context(memories: List[Dict]) -> str:
     for memory in memories:
         metadata = memory.metadata
         category = metadata.get('category', 'general')
+        source = metadata.get('source', 'unknown')
+        file_type = metadata.get('file_type', 'unknown')
+        
         if category not in categories:
             categories[category] = []
-        categories[category].append(metadata.get('text', ''))
+        
+        text_snippet = metadata.get('text', '')[:300]
+        if len(metadata.get('text', '')) > 300:
+            text_snippet += "..."
+            
+        categories[category].append({
+            'text': text_snippet,
+            'source': source,
+            'file_type': file_type,
+            'score': memory.score
+        })
 
-    # Format by category
-    for category, texts in categories.items():
-        if category != 'general':
-            context_parts.append(f"\n{category.upper()} NOTES:")
-            for text in texts:
-                snippet = text[:200] + "..." if len(text) > 200 else text
-                context_parts.append(f"- {snippet}")
+    # Format by category with more detail
+    for category, items in categories.items():
+        if category != 'general' and items:
+            context_parts.append(f"\n{category.upper().replace('_', ' ')} DATA:")
+            for item in items[:2]:  # Limit to top 2 per category
+                source_name = os.path.basename(item['source'])
+                context_parts.append(f"- From {source_name} ({item['file_type']}): {item['text']}")
 
     return "\n".join(context_parts)
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
     try:
+        print(f"Chat request: {req.message[:100]}...")  # Log incoming requests
         memories = fetch_memories(req.message)
         memory_context = format_memory_context(memories)
 

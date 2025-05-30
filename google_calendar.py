@@ -11,8 +11,12 @@ from googleapiclient.errors import HttpError
 class GoogleCalendarManager:
     def __init__(self):
         # Load credentials from the JSON file
-        with open('attached_assets/client_secret_343105907066-lfufef3jo7vk0vdokurifst8rfp94lon.apps.googleusercontent.com.json', 'r') as f:
-            self.client_config = json.load(f)
+        credentials_path = 'attached_assets/client_secret_343105907066-lfufef3jo7vk0vdokurifst8rfp94lon.apps.googleusercontent.com.json'
+        if os.path.exists(credentials_path):
+            with open(credentials_path, 'r') as f:
+                self.client_config = json.load(f)
+        else:
+            raise FileNotFoundError(f"Google credentials file not found at {credentials_path}")
         
         self.scopes = [
             'https://www.googleapis.com/auth/calendar.readonly',
