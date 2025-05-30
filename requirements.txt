@@ -1,0 +1,7 @@
+fastapi[standard]
+uvicorn
+openai>=1.0.0
+pinecone-client~=4.0.0
+tiktoken
+pinecone
+pydantic
