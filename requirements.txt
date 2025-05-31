@@ -1,5 +1,6 @@
 fastapi>=0.111
 uvicorn[standard]>=0.29
+aiofiles>=23.0.0
 pypdf==3.17.4
 pillow>=10.3
 pytesseract>=0.3

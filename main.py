@@ -1,12 +1,21 @@
 import os, re
 from typing import List
 from fastapi import FastAPI, Query
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import openai, pinecone
 from dotenv import load_dotenv
 
 load_dotenv()
 app = FastAPI()
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+async def read_root():
+    return FileResponse('static/index.html')
 
 INDEX_NAME = "companion-memory"
 NAMESPACE  = "v1"
@@ -20,6 +29,20 @@ index = pc.Index(INDEX_NAME)
 class Answer(BaseModel):
     answer: str
     sources: List[str]
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    try:
+        # Check if we can connect to Pinecone
+        stats = index.describe_index_stats()
+        return {
+            "status": "healthy",
+            "vector_count": stats.total_vector_count,
+            "index_name": INDEX_NAME
+        }
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
 
 @app.get("/ask", response_model=Answer)
 async def ask(question: str = Query(..., description="Your question")):
