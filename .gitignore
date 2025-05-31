@@ -56,4 +56,6 @@ backup/
 # Replit specific
 .replit
 replit.nix
-uv.lock
+uv.lockstatic/google_oauth_creds.json
+static/google_oauth_creds.json
+docs/*.pdf
