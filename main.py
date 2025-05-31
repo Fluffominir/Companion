@@ -8,6 +8,7 @@ from pathlib import Path
 from openai import OpenAI
 from pinecone import Pinecone
 from typing import List, Dict, Any
+from datetime import datetime
 
 # Setup
 logging.basicConfig(level=logging.INFO)
@@ -234,9 +235,20 @@ async def debug_search(q: str = "family"):
         return {"error": str(e)}
 
 @app.get("/health")
-async def health_check():
-    """Simple health check for monitoring"""
+async def health():
     return {"status": "ok"}
+
+@app.get("/export/{session_id}")
+async def export_conversation(session_id: str):
+    """Export conversation history for analysis"""
+    if session_id not in conversation_memory:
+        return {"error": "Session not found"}
+
+    return {
+        "session_id": session_id,
+        "conversation": conversation_memory[session_id],
+        "exported_at": datetime.now().isoformat()
+    }
 
 # Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
