@@ -26,6 +26,56 @@ env/
 .venv/
 .env/
 
+# Secrets and environment variables
+.env
+.env.local
+.env.production
+.env.development
+
+# API keys and sensitive data
+*.key
+*.pem
+secrets/
+config/secrets.json
+*client_secret*.json
+*service_account*.json
+
+# Personal data (keep your data private)
+attached_assets/*.pdf
+attached_assets/*.docx
+attached_assets/*.txt
+docs/*.pdf
+docs/*.docx
+docs/personal_*
+docs/private_*
+
+# Vector database and cache
+*.index
+*.faiss
+vector_store/
+embeddings_cache/
+
+# System files
+.DS_Store
+Thumbs.db
+*~
+.*.swp
+.*.swo
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
 # Environment variables
 .env
 

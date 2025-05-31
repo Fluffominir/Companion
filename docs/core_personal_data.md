@@ -1,43 +1,35 @@
 
-# Michael's Core Personal Information
+# Michael's Personal Information
+
+## Basic Details
+- **Full Name**: Michael Slusher
+- **Location**: [Your current city/state]
+- **Profession**: [Your role at Rocket Launch Studio]
+- **Email**: [Your contact email]
 
 ## Family & Background
-- **Father's Name**: [Add your father's name here]
-- **Mother's Name**: [Add your mother's name here]
-- **Siblings**: [Add sibling information]
-- **Birthdate**: [Your birthdate]
-- **Birthplace**: [Where you were born]
-- **Current Location**: [Where you live now]
+- **Family Members**: [Parents, siblings, spouse, children]
+- **Background**: [Brief personal history]
 
-## Personal Details
-- **Full Name**: Michael Slusher
-- **Profession**: [Your current role/profession]
-- **Company**: Rocket Launch Studio
-- **Education**: [Your educational background]
-- **Relationship Status**: [Current relationship status]
+## Work & Career
+- **Current Role**: [Position at Rocket Launch Studio]
+- **Key Projects**: [Major work you're involved in]
+- **Career Goals**: [Professional aspirations]
 
-## Key Life Events
-- [Add major life events with dates]
-- [Important milestones]
-- [Significant relationships]
+## Personal Interests
+- **Hobbies**: [What you enjoy doing]
+- **Learning Goals**: [Skills you want to develop]
+- **Values**: [What's important to you]
 
-## Personality & Preferences
-- **Personality Type**: [Your MBTI/Enneagram/etc.]
-- **Core Values**: [List your core values]
-- **Communication Style**: [How you prefer to communicate]
-- **Work Style**: [How you work best]
-- **Interests & Hobbies**: [List your main interests]
+## Daily Life
+- **Routine**: [Typical daily schedule]
+- **Preferences**: [Communication style, work preferences]
+- **Goals**: [Current personal and professional goals]
 
-## Goals & Aspirations
-- **Current Goals (2025)**:
-  - [Goal 1]
-  - [Goal 2]
-  - [Goal 3]
-- **Long-term Vision**: [Your 5-10 year vision]
-- **Career Aspirations**: [Professional goals]
+## AI Assistant Context
+- **Remember**: [Key things you want the AI to know]
+- **Help With**: [Areas where you want AI assistance]
+- **Communication Style**: [How you prefer the AI to respond]
 
-## Context for AI Assistant
-- **What I want my AI to know**: [Specific things you want remembered]
-- **How I want to be reminded**: [Reminder preferences]
-- **Topics to prioritize**: [What's most important to track]
-- **Communication preferences with AI**: [How you want the AI to talk to you]
+---
+*Fill out the sections above with your actual information. The AI will use this to provide personalized assistance.*

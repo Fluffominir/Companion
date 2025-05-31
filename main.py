@@ -1,38 +1,31 @@
-import os
-from typing import List, Dict
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+import os
+import logging
 from openai import OpenAI
 from pinecone import Pinecone
-import logging
-from datetime import datetime
-from pathlib import Path
+from typing import List, Dict, Any
 
-# Setup logging
+# Setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuration
+# Environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-
-if not OPENAI_API_KEY or not PINECONE_API_KEY:
-    raise ValueError("OPENAI_API_KEY and PINECONE_API_KEY must be set")
-
 INDEX_NAME = "companion-memory"
 
+if not OPENAI_API_KEY or not PINECONE_API_KEY:
+    raise ValueError("Missing required API keys")
+
+# Initialize
 client = OpenAI(api_key=OPENAI_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
+index = pc.Index(INDEX_NAME)
 
-try:
-    index = pc.Index(INDEX_NAME)
-except Exception as e:
-    logger.error(f"Failed to connect to Pinecone index: {e}")
-    raise Exception(f"Failed to connect to Pinecone index: {e}")
-
-app = FastAPI(title="Michael's AI Companion")
+app = FastAPI(title="Personal AI Companion")
 
 # Simple conversation memory
 conversation_memory = {}

@@ -1,46 +1,44 @@
 
-# Michael's AI Companion
+# Personal AI Companion
 
-A personal AI assistant trained on your personal data using RAG (Retrieval-Augmented Generation).
+A streamlined personal AI assistant using RAG (Retrieval-Augmented Generation) trained on your personal documents.
 
-## Quick Setup
+## Quick Start
 
-1. **Add your personal data:**
-   - Place PDFs, markdown files, or text files in `docs/` or `attached_assets/`
-   - Fill out `docs/core_personal_data.md` with your basic information
-
-2. **Set environment variables:**
+1. **Setup environment:**
    ```bash
-   export OPENAI_API_KEY=your_openai_key
-   export PINECONE_API_KEY=your_pinecone_key
+   export OPENAI_API_KEY=your_key
+   export PINECONE_API_KEY=your_key
    ```
 
-3. **Process your data:**
+2. **Add your data:**
+   - Fill out `docs/core_personal_data.md`
+   - Add PDFs/documents to `docs/` or `attached_assets/`
+
+3. **Process data:**
    ```bash
    python scripts/clean_ingest.py
    ```
 
-4. **Start the companion:**
+4. **Run application:**
    ```bash
-   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   uvicorn main:app --host 0.0.0.0 --port 8000
    ```
-
-5. **Open your companion:**
-   Go to `http://localhost:8000`
 
 ## Commands
 
-- **Ingest new data:** `python scripts/clean_ingest.py`
-- **Validate system:** `python scripts/validate_data.py`
-- **Test specific query:** `python scripts/validate_data.py "your question here"`
+| Command | Purpose |
+|---------|---------|
+| `python scripts/clean_ingest.py` | Process new documents |
+| `python scripts/validate_data.py` | Test system health |
+| `python scripts/validate_data.py "query"` | Test specific search |
 
 ## Features
 
-- ✅ Clean RAG-based retrieval
-- ✅ Accuracy-focused responses (no hallucination)
-- ✅ Support for PDFs, markdown, and text files
-- ✅ Automatic categorization
-- ✅ Debug endpoints for troubleshooting
+- 📄 Supports PDFs, Markdown, Text files
+- 🎯 Accurate retrieval without hallucination
+- 🔍 Automatic content categorization
+- 🔧 Built-in validation and testingleshooting
 
 ## File Structure
 
