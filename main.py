@@ -87,36 +87,43 @@ def embed(text: str) -> List[float]:
 def fetch_memories(q: str, k: int = 10, category_filter: str = None) -> List[Dict]:
     """Enhanced memory retrieval with category filtering and better scoring"""
     try:
+        logger.info(f"Searching for: '{q}' with category filter: {category_filter}")
+        
         filter_dict = {}
         if category_filter and category_filter != "all":
             filter_dict["category"] = category_filter
             
         results = index.query(
             vector=embed(q), 
-            top_k=k * 3,  # Get more results for better filtering
+            top_k=k * 4,  # Get more results for better filtering
             include_metadata=True,
             filter=filter_dict
         ).matches
         
-        # Enhanced filtering and scoring
+        logger.info(f"Found {len(results)} raw results")
+        
+        # More lenient filtering for better recall
         filtered_results = []
         seen_sources = set()
         
         for result in results:
-            # High confidence threshold
-            if result.score > 0.8:
+            # Lower thresholds for better recall
+            if result.score > 0.75:  # High confidence
                 filtered_results.append(result)
-            # Medium confidence with diversity
-            elif result.score > 0.7:
+                logger.info(f"High confidence match (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
+            elif result.score > 0.6:  # Medium confidence
                 source = result.metadata.get('source', '')
-                if source not in seen_sources or len(filtered_results) < 3:
+                if source not in seen_sources or len(filtered_results) < 5:
                     filtered_results.append(result)
                     seen_sources.add(source)
-            # Lower confidence only if we don't have enough results
-            elif result.score > 0.6 and len(filtered_results) < 2:
+                    logger.info(f"Medium confidence match (score: {result.score:.3f}): {source}")
+            elif result.score > 0.4 and len(filtered_results) < 3:  # Low confidence but we need results
                 filtered_results.append(result)
+                logger.info(f"Low confidence match (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
         
+        logger.info(f"Returning {len(filtered_results)} filtered results")
         return filtered_results[:k]
+        
     except Exception as e:
         logger.error(f"Memory fetch error: {e}")
         return []
@@ -426,6 +433,58 @@ async def api_status():
             "status": "degraded", 
             "error": str(e)
         }
+
+@app.get("/api/debug/memory")
+async def debug_memory():
+    """Debug endpoint to inspect stored memory data"""
+    try:
+        # Get sample of stored data
+        test_embedding = embed("test query")
+        results = index.query(
+            vector=test_embedding,
+            top_k=20,
+            include_metadata=True
+        )
+        
+        debug_data = []
+        categories = {}
+        sources = {}
+        
+        for match in results.matches:
+            metadata = match.metadata
+            category = metadata.get('category', 'unknown')
+            source = metadata.get('source', 'unknown')
+            
+            categories[category] = categories.get(category, 0) + 1
+            sources[source] = sources.get(source, 0) + 1
+            
+            debug_data.append({
+                "score": match.score,
+                "source": source,
+                "category": category,
+                "text_preview": metadata.get('text', 'no text')[:200],
+                "timestamp": metadata.get('timestamp', 'unknown'),
+                "file_type": metadata.get('file_type', 'unknown')
+            })
+        
+        # Get index stats
+        stats = index.describe_index_stats()
+        
+        return {
+            "total_vectors": stats.total_vector_count,
+            "categories_found": categories,
+            "sources_found": sources,
+            "sample_data": debug_data,
+            "data_quality": {
+                "has_text": sum(1 for d in debug_data if d['text_preview'] != 'no text'),
+                "has_categories": sum(1 for d in debug_data if d['category'] != 'unknown'),
+                "has_sources": sum(1 for d in debug_data if d['source'] != 'unknown')
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Debug memory error: {e}")
+        return {"error": str(e)}
 
 # Keep all existing calendar endpoints
 @app.get("/auth/google")
