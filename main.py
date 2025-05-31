@@ -821,7 +821,10 @@ async def get_youtube_data():
 
     try:
         data = integrations.get_youtube_data(user_sessions['google_credentials'])
-        return data```python
+        return {"message": "File processed successfully", "vectors_created": len(chunks)}
+    except Exception as e:
+        logger.error(f"Error processing uploaded file: {e}")
+        return {"error": f"Processing failed: {str(e)}"}
     except Exception as e:
         logger.error(f"YouTube integration error: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting YouTube data: {str(e)}")
