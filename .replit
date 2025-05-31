@@ -3,7 +3,7 @@ entrypoint = "main.py"
 modules = ["python-3.11"]
 
 [nix]
-packages = ["cairo", "cargo", "ffmpeg-full", "freetype", "ghostscript", "glibcLocales", "gobject-introspection", "gtk3", "hdf5", "lcms2", "libGL", "libGLU", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "pkg-config", "qhull", "rustc", "tcl", "tesseract", "tk", "xcodebuild", "zlib"]
+packages = ["cairo", "cargo", "ffmpeg-full", "freetype", "ghostscript", "glibcLocales", "gobject-introspection", "gtk3", "hdf5", "lcms2", "libGL", "libGLU", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "pkg-config", "qhull", "rustc", "tcl", "tesseract", "tk", "xcodebuild", "zlib", "mailutils", "imagemagickBig"]
 channel = "stable-24_05"
 
 [[ports]]
