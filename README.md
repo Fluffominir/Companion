@@ -45,9 +45,13 @@ A personal AI assistant trained on your personal data using RAG (Retrieval-Augme
 ## File Structure
 
 ```
-docs/                    # Your personal documents
+docs/                       # Your personal documents (PDFs, markdown, text)
 ├── core_personal_data.md   # Fill this out first!
-└── ...                     # Your other docs
+└── [your personal files]   # Journals, books, profiles, etc.
+
+attached_assets/            # Additional personal documents
+├── MichaelPersonality.pdf  # Core personality data
+└── MichaelProfile.pdf      # Core profile data
 
 scripts/
 ├── clean_ingest.py         # Process and index documents
@@ -55,6 +59,8 @@ scripts/
 
 main.py                     # FastAPI application
 static/index.html          # Web interface
+.env.template              # Environment variables template
+requirements.txt           # Python dependencies
 ```
 
 ## Adding New Data

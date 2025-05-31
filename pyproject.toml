@@ -1,7 +1,33 @@
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "python-template"
-version = "0.1.0"
-description = ""
-authors = ["Your Name <you@example.com>"]
+name = "ai-companion"
+version = "1.0.0"
+description = "Personal AI Companion with RAG"
+authors = [{name = "Michael Slusher", email = "michael@example.com"}]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "fastapi[standard]>=0.104.0",
+    "uvicorn>=0.24.0",
+    "openai>=1.0.0",
+    "pinecone-client>=4.0.0",
+    "tiktoken",
+    "pdfplumber",
+    "python-dotenv",
+    "requests",
+    "markdown",
+    "pydantic>=2.0.0"
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "black", "flake8"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+
+[project.scripts]
+start = "uvicorn main:app --host 0.0.0.0 --port 8000"
