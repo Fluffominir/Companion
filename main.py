@@ -22,10 +22,28 @@ INDEX_NAME = "companion-memory"
 if not OPENAI_API_KEY or not PINECONE_API_KEY:
     raise ValueError("Missing required API keys")
 
-# Initialize
+# Initialize with retry logic
 client = OpenAI(api_key=OPENAI_API_KEY)
 pc = Pinecone(api_key=PINECONE_API_KEY)
-index = pc.Index(INDEX_NAME)
+
+def get_index_with_retry(max_retries=3):
+    """Get index connection with retry logic"""
+    import time
+    for attempt in range(max_retries):
+        try:
+            index = pc.Index(INDEX_NAME)
+            # Test the connection
+            index.describe_index_stats()
+            logger.info(f"✅ Connected to Pinecone index: {INDEX_NAME}")
+            return index
+        except Exception as e:
+            logger.warning(f"Attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)  # Exponential backoff
+            else:
+                raise e
+
+index = get_index_with_retry()
 
 app = FastAPI(title="Personal AI Companion")
 
