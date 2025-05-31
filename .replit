@@ -7,6 +7,10 @@ packages = ["cairo", "cargo", "ffmpeg-full", "freetype", "ghostscript", "glibcLo
 channel = "stable-24_05"
 
 [[ports]]
+localPort = 5000
+externalPort = 5000
+
+[[ports]]
 localPort = 8000
 externalPort = 80
 
