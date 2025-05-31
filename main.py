@@ -2,9 +2,10 @@ import os, re
 from typing import List
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
-import openai, pinecone, dotenv
+import openai, pinecone
+from dotenv import load_dotenv
 
-dotenv.load_dotenv()
+load_dotenv()
 app = FastAPI()
 
 INDEX_NAME = "companion-memory"

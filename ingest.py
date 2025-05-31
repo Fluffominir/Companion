@@ -10,10 +10,11 @@ import os, io, re, json, uuid, pathlib, datetime as dt
 from typing import List
 from pypdf import PdfReader
 from PIL import Image
-import pytesseract, openai, pinecone, dotenv
+import pytesseract, openai, pinecone
+from dotenv import load_dotenv
 
 # ------------ CONFIG ------------
-dotenv.load_dotenv()
+load_dotenv()
 RAW_DIR   = pathlib.Path("data/raw")
 OUT_DIR   = pathlib.Path("data/processed"); OUT_DIR.mkdir(parents=True, exist_ok=True)
 INDEX_NAME = "companion-memory"
