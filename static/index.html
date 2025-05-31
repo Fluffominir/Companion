@@ -1089,3 +1089,257 @@
     </script>
 </body>
 </html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Companion - Michael's Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 800px;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #4a5568;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .chat-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+        }
+        
+        .user-message {
+            background: #4299e1;
+            color: white;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        
+        .assistant-message {
+            background: #f7fafc;
+            color: #2d3748;
+            align-self: flex-start;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .sources {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 8px;
+            font-style: italic;
+        }
+        
+        .input-container {
+            padding: 20px;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 10px;
+        }
+        
+        #questionInput {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 25px;
+            outline: none;
+            font-size: 14px;
+        }
+        
+        #questionInput:focus {
+            border-color: #4299e1;
+        }
+        
+        #askButton {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        
+        #askButton:hover {
+            background: #3182ce;
+        }
+        
+        #askButton:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+        }
+        
+        .typing {
+            display: none;
+            color: #718096;
+            font-style: italic;
+            padding: 12px 16px;
+        }
+        
+        .status {
+            padding: 10px 20px;
+            background: #f0fff4;
+            border-left: 4px solid #48bb78;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .error {
+            background: #fed7d7;
+            border-left-color: #f56565;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 AI Companion</h1>
+            <p>Your personal assistant with access to your documents and data</p>
+        </div>
+        
+        <div id="status" class="status">
+            System initializing...
+        </div>
+        
+        <div class="chat-container" id="chatContainer">
+            <div class="assistant-message">
+                <strong>AI Companion:</strong> Hello Michael! I'm your personal assistant with access to your documents and personal data. What would you like to know?
+            </div>
+        </div>
+        
+        <div class="typing" id="typing">
+            Assistant is typing...
+        </div>
+        
+        <div class="input-container">
+            <input 
+                type="text" 
+                id="questionInput" 
+                placeholder="Ask me anything about your personal data..."
+                autocomplete="off"
+            >
+            <button id="askButton">Ask</button>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chatContainer');
+        const questionInput = document.getElementById('questionInput');
+        const askButton = document.getElementById('askButton');
+        const typing = document.getElementById('typing');
+        const status = document.getElementById('status');
+
+        // Check system health on load
+        checkHealth();
+
+        async function checkHealth() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                if (data.status === 'healthy') {
+                    status.innerHTML = `✅ System ready - ${data.vector_count} documents loaded`;
+                    status.className = 'status';
+                } else {
+                    status.innerHTML = `❌ ${data.error}`;
+                    status.className = 'status error';
+                }
+            } catch (error) {
+                status.innerHTML = '❌ Cannot connect to backend';
+                status.className = 'status error';
+            }
+        }
+
+        async function askQuestion() {
+            const question = questionInput.value.trim();
+            if (!question) return;
+
+            // Add user message
+            addMessage(question, 'user');
+            questionInput.value = '';
+            
+            // Show typing indicator
+            typing.style.display = 'block';
+            askButton.disabled = true;
+            
+            try {
+                const response = await fetch(`/ask?question=${encodeURIComponent(question)}`);
+                const data = await response.json();
+                
+                // Hide typing indicator
+                typing.style.display = 'none';
+                askButton.disabled = false;
+                
+                // Add assistant message
+                addMessage(data.answer, 'assistant', data.sources);
+                
+            } catch (error) {
+                typing.style.display = 'none';
+                askButton.disabled = false;
+                addMessage('Sorry, there was an error processing your question.', 'assistant');
+            }
+        }
+
+        function addMessage(text, sender, sources = []) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            
+            let content = `<strong>${sender === 'user' ? 'You' : 'AI Companion'}:</strong> ${text}`;
+            
+            if (sources && sources.length > 0) {
+                content += `<div class="sources">Sources: ${sources.join(', ')}</div>`;
+            }
+            
+            messageDiv.innerHTML = content;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Event listeners
+        askButton.addEventListener('click', askQuestion);
+        questionInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                askQuestion();
+            }
+        });
+    </script>
+</body>
+</html>
