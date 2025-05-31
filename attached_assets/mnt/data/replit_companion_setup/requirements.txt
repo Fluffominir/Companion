@@ -1,0 +1,8 @@
+pypdf==3.17.4
+pillow>=10.3
+pytesseract>=0.3
+python-dotenv>=1.0
+openai==1.25.0
+pinecone-client==3.2.2
+fastapi>=0.111
+uvicorn[standard]>=0.29
