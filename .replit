@@ -24,6 +24,10 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
+args = '''python -c "import sys; print(f'Python: {sys.version}'); import os; print(f'OpenAI Key: {\"✅ Set\" if os.getenv(\"OPENAI_API_KEY\") and \"your_openai_api_key\" not in os.getenv(\"OPENAI_API_KEY\", \"\") else \"❌ Missing\"}')"'''
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
 args = "uvicorn main:app --host 0.0.0.0 --port 5000 --reload"
 
 [[workflows.workflow]]
