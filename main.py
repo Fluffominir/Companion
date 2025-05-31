@@ -101,31 +101,48 @@ def fetch_memories(q: str, k: int = 10, category_filter: str = None) -> List[Dic
 
         logger.info(f"Found {len(results)} raw results")
 
-        # Much more lenient filtering for better recall
+        # Strict filtering for accurate results
         filtered_results = []
         seen_content = set()
 
+        # First pass: High confidence matches
         for result in results:
-            # More relaxed thresholds to catch relevant content
             content_preview = result.metadata.get('text', '')[:100]
-
-            if result.score > 0.3:  # Much lower threshold
-                # Avoid exact duplicates but allow similar content from different sources
+            
+            if result.score > 0.75:  # High confidence threshold
                 if content_preview not in seen_content:
                     filtered_results.append(result)
                     seen_content.add(content_preview)
-                    logger.info(f"Match found (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
+                    logger.info(f"HIGH CONFIDENCE match (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
 
-                    # Stop when we have enough good results
-                    if len(filtered_results) >= k:
-                        break
+        # Second pass: Medium confidence for priority categories
+        if len(filtered_results) < k:
+            priority_categories = ['personality_core', 'profile_core', 'personality', 'personal_journal', 'journal_2024', 'journal_2025', 'journal_2022']
+            for result in results:
+                if len(filtered_results) >= k:
+                    break
+                    
+                content_preview = result.metadata.get('text', '')[:100]
+                category = result.metadata.get('category', '')
+                
+                if (result.score > 0.65 and category in priority_categories and 
+                    content_preview not in seen_content):
+                    filtered_results.append(result)
+                    seen_content.add(content_preview)
+                    logger.info(f"PRIORITY match (score: {result.score:.3f}, category: {category}): {result.metadata.get('source', 'unknown')}")
 
-        # If still no results, take the best matches regardless of score
-        if not filtered_results and results:
-            logger.warning("No results above threshold, taking best matches")
-            filtered_results = results[:k]
-            for result in filtered_results:
-                logger.info(f"Best available match (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
+        # Third pass: Decent matches for remaining slots
+        if len(filtered_results) < k:
+            for result in results:
+                if len(filtered_results) >= k:
+                    break
+                    
+                content_preview = result.metadata.get('text', '')[:100]
+                
+                if result.score > 0.6 and content_preview not in seen_content:
+                    filtered_results.append(result)
+                    seen_content.add(content_preview)
+                    logger.info(f"STANDARD match (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
 
         logger.info(f"Returning {len(filtered_results)} filtered results")
         return filtered_results[:k]
@@ -201,41 +218,34 @@ async def chat(req: ChatRequest):
         if req.session_id not in conversation_memory:
             conversation_memory[req.session_id] = []
 
-        system_prompt = """You are Michael's advanced personal AI companion with deep, contextual knowledge about him. You have comprehensive access to his personal data, thoughts, goals, work, and experiences.
+        system_prompt = """You are Michael's personal AI companion with access to his actual documented personal data. You must ONLY use information that is explicitly provided in the RELEVANT CONTEXT section below.
 
-Your capabilities and approach:
-🧠 DEEP PERSONAL KNOWLEDGE: You know Michael's personality traits, work patterns, relationships, goals, and personal history from his extensive documentation
-📚 COMPREHENSIVE CONTEXT: You have access to his journals (2022-2025), personality assessments, work at Rocket Launch Studio, books he's read, health records, and projects
-🎯 ACTIONABLE INSIGHTS: Provide specific, personalized advice based on his documented patterns, preferences, and past experiences
-🔗 PATTERN RECOGNITION: Connect insights across different areas of his life - work, personal growth, relationships, health, and creative projects
-💡 PROACTIVE ASSISTANCE: Anticipate needs and offer relevant suggestions based on his history and current context
-🎨 CREATIVE COLLABORATION: Support his projects and creative endeavors with relevant insights from his knowledge base
+CRITICAL RULES:
+🚫 DO NOT MAKE UP OR GUESS ANY PERSONAL INFORMATION
+🚫 DO NOT ASSUME FAMILY NAMES, RELATIONSHIPS, OR PERSONAL DETAILS
+🚫 If specific information is NOT in the context provided, you MUST say "I don't have that information in your documented data"
+✅ ONLY reference facts, names, details that are explicitly stated in the context
+✅ When you know something specific about Michael, cite which document/source it came from
+✅ Be helpful and conversational, but factually accurate above all else
 
-Key areas of expertise:
-- Michael's personality traits and behavioral patterns
-- His journaling insights and personal growth journey
-- Professional context at Rocket Launch Studio
-- Reading insights from books like "Attached," "The Body Keeps the Score," "E-Myth Revisited"
-- Health and wellness tracking and optimization
-- Creative projects and business development strategies
-- Relationship dynamics and communication preferences
+If asked about personal details (family, relationships, specific events, etc.):
+- Check the RELEVANT CONTEXT section carefully
+- Only state what is explicitly mentioned there
+- If the information isn't there, clearly state you don't have that specific information
+- Offer to help find it if Michael wants to add more data
 
-Communication style:
-- Be conversational but insightful
-- Reference specific details from his actual data when relevant
-- Provide actionable, personalized recommendations
-- Help him see connections he might have missed
-- Support his goals with evidence from his own documented experiences
-- Be genuinely helpful while maintaining his preferred communication style
-
-Always ground your responses in actual information from his personal data when possible."""
+You have access to Michael's journals, personality assessments, work documents, and other personal files, but you can only reference what's actually provided in the context for each conversation."""
 
         msgs = [{"role": "system", "content": system_prompt}]
 
         if memory_context:
             msgs.append({
                 "role": "system", 
-                "content": f"RELEVANT CONTEXT FROM MICHAEL'S PERSONAL DATA:\n{memory_context}"
+                "content": f"""RELEVANT CONTEXT FROM MICHAEL'S DOCUMENTED PERSONAL DATA:
+
+{memory_context}
+
+IMPORTANT: You must ONLY use information explicitly stated above. Do not infer, guess, or add details not present in this context. If specific information is not provided above, clearly state that you don't have that information in the documented data."""
             })
 
         # Enhanced conversation history (last 10 messages for better context)
@@ -439,6 +449,23 @@ async def api_status():
             "status": "degraded", 
             "error": str(e)
         }
+
+@app.get("/api/debug/query")
+async def debug_query(q: str = "family"):
+    """Debug specific queries to see what data is retrieved"""
+    try:
+        memories = fetch_memories(q, k=15)
+        context = format_memory_context(memories)
+        
+        return {
+            "query": q,
+            "memories_found": len(memories),
+            "memory_scores": [{"score": m.score, "source": m.metadata.get('source', ''), "category": m.metadata.get('category', '')} for m in memories],
+            "formatted_context": context,
+            "raw_memories": [{"text": m.metadata.get('text', '')[:200], "score": m.score, "source": m.metadata.get('source', '')} for m in memories[:5]]
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/api/debug/memory")
 async def debug_memory():
