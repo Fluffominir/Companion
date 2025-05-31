@@ -83,93 +83,121 @@ def embed(text: str) -> List[float]:
         logger.error(f"Embedding error: {e}")
         raise HTTPException(status_code=500, detail="Error creating embedding")
 
-def fetch_memories(q: str, k: int = 10, category_filter: str = None) -> List[Dict]:
-    """Enhanced memory retrieval with category filtering and better scoring"""
+def fetch_memories(q: str, k: int = 15, category_filter: str = None) -> List[Dict]:
+    """Enhanced memory retrieval with improved filtering for personal data accuracy"""
     try:
         logger.info(f"Searching for: '{q}' with category filter: {category_filter}")
 
+        # Multiple search strategies for comprehensive retrieval
+        all_results = []
+        
+        # Strategy 1: Direct semantic search
         filter_dict = {}
         if category_filter and category_filter != "all":
             filter_dict["category"] = category_filter
 
-        results = index.query(
+        semantic_results = index.query(
             vector=embed(q), 
-            top_k=k * 4,  # Get more results for better filtering
+            top_k=k * 3,
             include_metadata=True,
             filter=filter_dict
         ).matches
+        all_results.extend(semantic_results)
 
-        logger.info(f"Found {len(results)} raw results")
+        # Strategy 2: Search in high-priority personal categories if no filter specified
+        if not category_filter:
+            priority_categories = ['personality', 'personality_core', 'profile_core', 'personal_journal', 
+                                 'journal_2024', 'journal_2025', 'journal_2022', 'personal_database']
+            
+            for category in priority_categories:
+                try:
+                    priority_results = index.query(
+                        vector=embed(q),
+                        top_k=10,
+                        include_metadata=True,
+                        filter={"category": category}
+                    ).matches
+                    all_results.extend(priority_results)
+                except Exception as e:
+                    logger.warning(f"Error searching category {category}: {e}")
 
-        # Strict filtering for accurate results
+        logger.info(f"Found {len(all_results)} total results from all strategies")
+
+        # Enhanced filtering with lower thresholds for personal data
         filtered_results = []
         seen_content = set()
 
-        # First pass: High confidence matches
-        for result in results:
-            content_preview = result.metadata.get('text', '')[:100]
+        # Sort by score descending
+        all_results.sort(key=lambda x: x.score, reverse=True)
+
+        for result in all_results:
+            if len(filtered_results) >= k:
+                break
+                
+            content_preview = result.metadata.get('text', '')[:150]
+            category = result.metadata.get('category', '')
+            source = result.metadata.get('source', '')
             
-            if result.score > 0.75:  # High confidence threshold
-                if content_preview not in seen_content:
-                    filtered_results.append(result)
-                    seen_content.add(content_preview)
-                    logger.info(f"HIGH CONFIDENCE match (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
-
-        # Second pass: Medium confidence for priority categories
-        if len(filtered_results) < k:
-            priority_categories = ['personality_core', 'profile_core', 'personality', 'personal_journal', 'journal_2024', 'journal_2025', 'journal_2022']
-            for result in results:
-                if len(filtered_results) >= k:
-                    break
-                    
-                content_preview = result.metadata.get('text', '')[:100]
-                category = result.metadata.get('category', '')
+            # Skip duplicates
+            if content_preview in seen_content:
+                continue
                 
-                if (result.score > 0.65 and category in priority_categories and 
-                    content_preview not in seen_content):
-                    filtered_results.append(result)
-                    seen_content.add(content_preview)
-                    logger.info(f"PRIORITY match (score: {result.score:.3f}, category: {category}): {result.metadata.get('source', 'unknown')}")
-
-        # Third pass: Decent matches for remaining slots
-        if len(filtered_results) < k:
-            for result in results:
-                if len(filtered_results) >= k:
-                    break
-                    
-                content_preview = result.metadata.get('text', '')[:100]
+            # More inclusive thresholds based on content type
+            min_score = 0.3  # Base threshold
+            
+            # Lower thresholds for personal/family content
+            personal_keywords = ['family', 'father', 'mother', 'dad', 'mom', 'parent', 'brother', 'sister', 
+                               'wife', 'husband', 'name', 'born', 'grew up', 'childhood', 'relationship']
+            if any(keyword.lower() in q.lower() for keyword in personal_keywords):
+                min_score = 0.25  # More inclusive for personal queries
                 
-                if result.score > 0.6 and content_preview not in seen_content:
-                    filtered_results.append(result)
-                    seen_content.add(content_preview)
-                    logger.info(f"STANDARD match (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
+            # Even lower for high-priority categories
+            if category in ['personality', 'personality_core', 'profile_core', 'personal_database']:
+                min_score = 0.2
+                
+            # Priority boost for core personal files
+            if any(priority_file in source.lower() for priority_file in ['personality', 'profile', 'personal']):
+                min_score = 0.15
+
+            if result.score >= min_score:
+                filtered_results.append(result)
+                seen_content.add(content_preview)
+                logger.info(f"INCLUDED (score: {result.score:.3f}, category: {category}): {source}")
 
         logger.info(f"Returning {len(filtered_results)} filtered results")
-        return filtered_results[:k]
+        return filtered_results
 
     except Exception as e:
         logger.error(f"Memory fetch error: {e}")
         return []
 
 def format_memory_context(memories: List[Dict]) -> str:
-    """Enhanced memory formatting with better organization and relevance"""
+    """Enhanced memory formatting with better organization for personal data accuracy"""
     if not memories:
         return ""
 
     context_parts = []
     categories = {}
 
-    # Group memories by category
+    # Group memories by category with deduplication
+    seen_content = set()
     for memory in memories:
         metadata = memory.metadata
         category = metadata.get('category', 'general')
+        text_content = metadata.get('text', '')
+        
+        # Skip near-duplicates
+        content_hash = text_content[:200]
+        if content_hash in seen_content:
+            continue
+        seen_content.add(content_hash)
 
         if category not in categories:
             categories[category] = []
 
-        # Get more text for better context
-        text_snippet = metadata.get('text', '')[:500]
-        if len(metadata.get('text', '')) > 500:
+        # Get more text for personal queries, especially family information
+        text_snippet = text_content[:800]  # Increased for personal context
+        if len(text_content) > 800:
             text_snippet += "..."
 
         categories[category].append({
@@ -177,25 +205,46 @@ def format_memory_context(memories: List[Dict]) -> str:
             'source': os.path.basename(metadata.get('source', 'unknown')),
             'score': memory.score,
             'file_type': metadata.get('file_type', 'unknown'),
-            'timestamp': metadata.get('timestamp', '')
+            'timestamp': metadata.get('timestamp', ''),
+            'category': category
         })
 
-    # Priority order for categories
+    # Priority order for categories - personal data first
     priority_categories = [
-        'personality', 'goals', 'personal_journal', 'work', 'projects', 
-        'ideas', 'health', 'books', 'meetings', 'general'
+        'personality_core', 'profile_core', 'personality', 'personal_database',
+        'personal_journal', 'journal_2025', 'journal_2024', 'journal_2022', 
+        'family', 'relationships', 'goals', 'work', 'projects', 'health', 
+        'books', 'ideas', 'meetings', 'general'
     ]
+
+    # Add any categories not in priority list
+    all_categories = set(categories.keys())
+    for cat in all_categories:
+        if cat not in priority_categories:
+            priority_categories.append(cat)
 
     # Format with priorities and better structure
     for category in priority_categories:
         if category in categories and categories[category]:
-            items = sorted(categories[category], key=lambda x: x['score'], reverse=True)[:3]
-            context_parts.append(f"\n═══ {category.upper().replace('_', ' ')} INSIGHTS ═══")
+            items = sorted(categories[category], key=lambda x: x['score'], reverse=True)
+            
+            # Show more items for personal categories
+            max_items = 5 if any(personal_cat in category for personal_cat in 
+                               ['personality', 'personal', 'profile', 'family', 'journal']) else 3
+            items = items[:max_items]
+            
+            context_parts.append(f"\n═══ {category.upper().replace('_', ' ')} DATA ═══")
 
             for i, item in enumerate(items, 1):
-                relevance = "🔥 HIGHLY RELEVANT" if item['score'] > 0.85 else "📌 RELEVANT" if item['score'] > 0.75 else "💡 RELATED"
-                context_parts.append(f"\n{i}. {relevance} | From: {item['source']}")
+                score = item['score']
+                relevance = ("🎯 EXACT MATCH" if score > 0.9 else 
+                           "🔥 HIGHLY RELEVANT" if score > 0.7 else 
+                           "📌 RELEVANT" if score > 0.5 else 
+                           "💡 RELATED")
+                
+                context_parts.append(f"\n{i}. {relevance} (Score: {score:.3f}) | Source: {item['source']}")
                 context_parts.append(f"   Content: {item['text']}")
+                
                 if item['timestamp']:
                     try:
                         dt = datetime.fromisoformat(item['timestamp'].replace('Z', '+00:00'))
@@ -203,38 +252,122 @@ def format_memory_context(memories: List[Dict]) -> str:
                     except:
                         pass
 
+    total_memories = sum(len(cat_items) for cat_items in categories.values())
+    context_parts.insert(0, f"FOUND {total_memories} RELEVANT MEMORIES FROM MICHAEL'S PERSONAL DATABASE:")
+
     return "\n".join(context_parts) if context_parts else ""
+
+def comprehensive_personal_search(query: str) -> List[Dict]:
+    """Comprehensive search for personal/family information across all categories"""
+    try:
+        # Search multiple variations and categories
+        search_variations = [
+            query,
+            f"family {query}",
+            f"personal {query}",
+            f"father {query}" if 'father' in query.lower() or 'dad' in query.lower() else None,
+            f"mother {query}" if 'mother' in query.lower() or 'mom' in query.lower() else None,
+        ]
+        
+        # Filter out None values
+        search_variations = [v for v in search_variations if v]
+        
+        all_results = []
+        
+        # Search personal categories specifically
+        personal_categories = [
+            'personality', 'personality_core', 'profile_core', 'personal_journal',
+            'journal_2022', 'journal_2024', 'journal_2025', 'personal_database',
+            'family', 'relationships'
+        ]
+        
+        for variation in search_variations:
+            # General search
+            results = index.query(
+                vector=embed(variation),
+                top_k=20,
+                include_metadata=True
+            ).matches
+            all_results.extend(results)
+            
+            # Category-specific searches
+            for category in personal_categories:
+                try:
+                    cat_results = index.query(
+                        vector=embed(variation),
+                        top_k=10,
+                        include_metadata=True,
+                        filter={"category": category}
+                    ).matches
+                    all_results.extend(cat_results)
+                except:
+                    continue
+        
+        # Remove duplicates and sort by relevance
+        seen_ids = set()
+        unique_results = []
+        for result in sorted(all_results, key=lambda x: x.score, reverse=True):
+            result_id = result.id
+            if result_id not in seen_ids:
+                seen_ids.add(result_id)
+                unique_results.append(result)
+        
+        return unique_results[:25]  # Return top 25 most relevant
+        
+    except Exception as e:
+        logger.error(f"Comprehensive search error: {e}")
+        return []
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
     try:
         logger.info(f"Chat request from {req.session_id}: {req.message[:100]}...")
 
-        # Enhanced memory retrieval
-        memories = fetch_memories(req.message, k=12)
+        # Enhanced memory retrieval with comprehensive search for personal queries
+        personal_keywords = ['father', 'dad', 'mother', 'mom', 'family', 'parent', 'brother', 'sister', 
+                           'wife', 'husband', 'name', 'born', 'relationship', 'childhood']
+        
+        is_personal_query = any(keyword.lower() in req.message.lower() for keyword in personal_keywords)
+        
+        if is_personal_query:
+            logger.info("Personal query detected - using comprehensive search")
+            memories = comprehensive_personal_search(req.message)
+            # Also get regular memories as backup
+            regular_memories = fetch_memories(req.message, k=8)
+            memories.extend(regular_memories)
+        else:
+            memories = fetch_memories(req.message, k=12)
+            
         memory_context = format_memory_context(memories)
 
         # Enhanced conversation management
         if req.session_id not in conversation_memory:
             conversation_memory[req.session_id] = []
 
-        system_prompt = """You are Michael's personal AI companion with access to his actual documented personal data. You must ONLY use information that is explicitly provided in the RELEVANT CONTEXT section below.
+        system_prompt = """You are Michael's personal AI companion with access to his comprehensive personal database including journals, personality assessments, family information, work documents, and personal history.
 
-CRITICAL RULES:
-🚫 DO NOT MAKE UP OR GUESS ANY PERSONAL INFORMATION
-🚫 DO NOT ASSUME FAMILY NAMES, RELATIONSHIPS, OR PERSONAL DETAILS
-🚫 If specific information is NOT in the context provided, you MUST say "I don't have that information in your documented data"
-✅ ONLY reference facts, names, details that are explicitly stated in the context
-✅ When you know something specific about Michael, cite which document/source it came from
-✅ Be helpful and conversational, but factually accurate above all else
+ACCURACY RULES - CRITICAL:
+🚫 NEVER guess, assume, or fabricate personal information
+🚫 NEVER state personal details (names, dates, relationships) unless explicitly found in the provided context
+🚫 If you cannot find specific information in the context, you MUST say: "I don't see that specific information in your documented data. Let me search more thoroughly - could you help me understand what you're looking for?"
 
-If asked about personal details (family, relationships, specific events, etc.):
-- Check the RELEVANT CONTEXT section carefully
-- Only state what is explicitly mentioned there
-- If the information isn't there, clearly state you don't have that specific information
-- Offer to help find it if Michael wants to add more data
+✅ ONLY state facts that are explicitly written in the RELEVANT CONTEXT section
+✅ Always cite the source document when sharing personal information
+✅ If context is limited, ask clarifying questions to help retrieve the right information
+✅ Prioritize accuracy over appearing knowledgeable
 
-You have access to Michael's journals, personality assessments, work documents, and other personal files, but you can only reference what's actually provided in the context for each conversation."""
+PERSONAL DATA PRIORITY:
+- Family information, names, relationships are HIGH PRIORITY for accuracy
+- When asked about family members, search thoroughly in personality profiles, journals, and personal documents
+- If personal information isn't found, suggest running a more comprehensive search or adding the information to the database
+
+RESPONSE APPROACH:
+- Be helpful and conversational
+- When uncertain, ask questions to clarify what specific information is needed
+- Offer to search different categories or time periods
+- Suggest ways to add missing information to the database
+
+Remember: It's better to admit not finding information than to provide incorrect personal details."""
 
         msgs = [{"role": "system", "content": system_prompt}]
 
@@ -465,6 +598,86 @@ async def debug_query(q: str = "family"):
             "raw_memories": [{"text": m.metadata.get('text', '')[:200], "score": m.score, "source": m.metadata.get('source', '')} for m in memories[:5]]
         }
     except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/debug/personal-data")
+async def debug_personal_data(query: str = "family"):
+    """Debug endpoint specifically for personal/family data queries"""
+    try:
+        logger.info(f"Debugging personal data for query: {query}")
+        
+        # Test comprehensive search
+        comprehensive_results = comprehensive_personal_search(query)
+        
+        # Test regular search
+        regular_results = fetch_memories(query, k=15)
+        
+        # Test category-specific searches
+        personal_categories = ['personality', 'personality_core', 'profile_core', 'personal_journal', 
+                             'journal_2022', 'journal_2024', 'journal_2025']
+        
+        category_results = {}
+        for category in personal_categories:
+            try:
+                cat_results = index.query(
+                    vector=embed(query),
+                    top_k=10,
+                    include_metadata=True,
+                    filter={"category": category}
+                ).matches
+                
+                category_results[category] = [{
+                    "score": r.score,
+                    "text_preview": r.metadata.get('text', '')[:200],
+                    "source": r.metadata.get('source', ''),
+                    "has_family_keywords": any(word in r.metadata.get('text', '').lower() 
+                                             for word in ['father', 'dad', 'mother', 'mom', 'parent', 'family'])
+                } for r in cat_results]
+            except:
+                category_results[category] = []
+        
+        # Extract family mentions from all results
+        all_results = comprehensive_results + regular_results
+        family_mentions = []
+        
+        for result in all_results:
+            text = result.metadata.get('text', '')
+            text_lower = text.lower()
+            
+            # Look for family-related sentences
+            sentences = text.split('.')
+            for sentence in sentences:
+                if any(word in sentence.lower() for word in ['father', 'dad', 'mother', 'mom', 'parent', 'family']):
+                    family_mentions.append({
+                        "sentence": sentence.strip(),
+                        "source": result.metadata.get('source', ''),
+                        "category": result.metadata.get('category', ''),
+                        "score": result.score
+                    })
+        
+        return {
+            "query": query,
+            "comprehensive_search_results": len(comprehensive_results),
+            "regular_search_results": len(regular_results),
+            "category_breakdown": {cat: len(results) for cat, results in category_results.items()},
+            "family_mentions_found": len(family_mentions),
+            "family_mentions": family_mentions[:10],  # Top 10 mentions
+            "top_comprehensive_results": [{
+                "score": r.score,
+                "source": r.metadata.get('source', ''),
+                "category": r.metadata.get('category', ''),
+                "text_preview": r.metadata.get('text', '')[:300]
+            } for r in comprehensive_results[:5]],
+            "recommendations": [
+                "If no family mentions found, check if personal PDFs are processed",
+                "Run 'python scripts/validate_personal_data.py' to verify data",
+                "Check if MichaelPersonality.pdf and MichaelProfile.pdf are in docs/",
+                "Family information should be in personality or profile documents"
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Personal data debug error: {e}")
         return {"error": str(e)}
 
 @app.get("/api/debug/memory")

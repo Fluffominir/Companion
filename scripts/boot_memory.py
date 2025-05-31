@@ -61,11 +61,25 @@ def embed(text):
         return None
 
 def categorize_content(text, filename):
-    """Enhanced categorization with better logic"""
+    """Enhanced categorization with priority for personal data"""
     text_lower = text.lower()
     filename_lower = filename.lower()
 
-    # Priority-based categorization with more specific patterns
+    # HIGH PRIORITY: Core personal files
+    if 'michaelpersonality' in filename_lower.replace(' ', '').replace('_', ''):
+        return 'personality_core'
+    elif 'michaelprofile' in filename_lower.replace(' ', '').replace('_', ''):
+        return 'profile_core'
+    elif any(word in filename_lower for word in ['personality', 'profile']) and 'michael' in filename_lower:
+        return 'personality'
+    
+    # FAMILY/PERSONAL content detection
+    family_keywords = ['father', 'dad', 'mother', 'mom', 'parent', 'family', 'brother', 'sister', 
+                      'wife', 'husband', 'born', 'grew up', 'childhood', 'relationship', 'married']
+    if any(keyword in text_lower for keyword in family_keywords):
+        return 'personal_database'
+    
+    # Journal categorization
     if any(word in filename_lower for word in ['journal', 'diary']) or any(word in text_lower for word in ['dear diary', 'today i', 'feeling', 'reflect']):
         if '2022' in filename_lower or '2022' in text_lower:
             return 'journal_2022'
@@ -75,8 +89,8 @@ def categorize_content(text, filename):
             return 'journal_2025'
         else:
             return 'personal_journal'
-    elif any(word in filename_lower for word in ['personality', 'profile', 'michael']) and not 'company' in filename_lower:
-        return 'personality'
+    
+    # Other categories
     elif any(word in filename_lower for word in ['health', 'medical', 'superbill', 'records']):
         return 'health'
     elif any(word in filename_lower for word in ['company', 'employee', 'handbook', 'rocket', 'launch']):
