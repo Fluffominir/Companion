@@ -21,3 +21,21 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+
+[[workflows.workflow]]
+name = "Ingest Documents"
+author = 43316633
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python ingest_simple.py"
+
+[[workflows.workflow]]
+name = "Build Fine-tune Data"
+author = 43316633
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python build_finetune.py"
