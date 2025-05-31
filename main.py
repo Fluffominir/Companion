@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import os
 import logging
+from pathlib import Path
 from openai import OpenAI
 from pinecone import Pinecone
 from typing import List, Dict, Any

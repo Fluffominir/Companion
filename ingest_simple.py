@@ -25,7 +25,11 @@ def extract_pdf_text(pdf_path):
         reader = PdfReader(str(pdf_path))
         text = ""
         for page in reader.pages:
-            text += page.extract_text() or ""
+            page_text = page.extract_text() or ""
+            text += page_text
+        
+        # Clean up text encoding issues
+        text = text.encode('utf-8', errors='ignore').decode('utf-8')
         return text
     except Exception as e:
         print(f"Error reading {pdf_path}: {e}")
@@ -90,6 +94,11 @@ def main():
                 if len(chunk.strip()) < 20:
                     continue
                     
+                # Clean chunk text
+                chunk = chunk.strip()
+                if len(chunk) > 8000:  # OpenAI embedding limit
+                    chunk = chunk[:8000]
+                    
                 # Generate embedding
                 try:
                     embedding = client.embeddings.create(
@@ -111,7 +120,7 @@ def main():
                     })
                     
                 except Exception as e:
-                    print(f"  ❌ Error embedding chunk: {e}")
+                    print(f"  ❌ Error embedding chunk {i}: {e}")
                     continue
             
             # Upsert to Pinecone

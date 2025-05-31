@@ -14,27 +14,31 @@ def extract_facts_from_text(text, source_file):
     """Extract facts and personal information from text"""
     facts = []
     
+    # Clean text
+    text = text.encode('utf-8', errors='ignore').decode('utf-8')
+    
     # Split into paragraphs
     paragraphs = re.split(r'\n{2,}', text)
     
     for para in paragraphs:
         para = para.strip()
-        if len(para) < 50:  # Skip very short paragraphs
+        if len(para) < 50 or len(para) > 2000:  # Skip very short or very long paragraphs
             continue
             
         # Look for fact-like statements
         if any(keyword in para.lower() for keyword in [
             'i am', 'my name', 'i work', 'i live', 'my goal', 
-            'i like', 'i prefer', 'my hobby', 'my interest'
+            'i like', 'i prefer', 'my hobby', 'my interest',
+            'my family', 'my wife', 'my children', 'my job'
         ]):
             facts.append({
-                "text": para,
+                "text": para[:1500],  # Limit length
                 "source": source_file,
                 "type": "personal_fact"
             })
-        elif para.startswith(('I ', 'Today ', 'We ', 'My ')):
+        elif para.startswith(('I ', 'Today ', 'We ', 'My ', 'This ')):
             facts.append({
-                "text": para,
+                "text": para[:1500],  # Limit length
                 "source": source_file,
                 "type": "journal_entry"
             })
