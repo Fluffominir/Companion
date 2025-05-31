@@ -65,13 +65,13 @@ def categorize_content(text, filename):
     text_lower = text.lower()
     filename_lower = filename.lower()
 
-    # HIGH PRIORITY: Core personal files
-    if 'michaelpersonality' in filename_lower.replace(' ', '').replace('_', ''):
+    # HIGH PRIORITY: Core personal files (including attached_assets)
+    if 'michaelpersonality' in filename_lower.replace(' ', '').replace('_', '').replace('/', ''):
         return 'personality_core'
-    elif 'michaelprofile' in filename_lower.replace(' ', '').replace('_', ''):
+    elif 'michaelprofile' in filename_lower.replace(' ', '').replace('_', '').replace('/', ''):
         return 'profile_core'
     elif any(word in filename_lower for word in ['personality', 'profile']) and 'michael' in filename_lower:
-        return 'personality'
+        return 'personality_core' if 'attached_assets' in filename_lower else 'personality'
     
     # FAMILY/PERSONAL content detection
     family_keywords = ['father', 'dad', 'mother', 'mom', 'parent', 'family', 'brother', 'sister', 
@@ -327,10 +327,12 @@ for path in md_files:
     except Exception as e:
         print(f"✗ Error processing {path}: {e}")
 
-# Process PDF files with explicit paths
+# Process PDF files with explicit paths including attached_assets
 pdf_patterns = [
     "docs/*.pdf",
-    "docs/**/*.pdf"
+    "docs/**/*.pdf",
+    "attached_assets/*.pdf",
+    "attached_assets/**/*.pdf"
 ]
 
 all_pdf_files = []
@@ -342,6 +344,25 @@ pdf_files = list(set(all_pdf_files))
 print(f"Found {len(pdf_files)} PDF files:")
 for pdf_file in pdf_files:
     print(f"  - {pdf_file}")
+
+# Specifically check for critical personal files
+critical_files = [
+    "attached_assets/MichaelPersonality.pdf",
+    "attached_assets/MichaelProfile.pdf", 
+    "docs/MichaelPersonality.pdf",
+    "docs/MichaelProfile.pdf"
+]
+
+found_critical = []
+for critical_file in critical_files:
+    if os.path.exists(critical_file):
+        found_critical.append(critical_file)
+        print(f"✅ CRITICAL FILE FOUND: {critical_file}")
+    else:
+        print(f"❌ CRITICAL FILE MISSING: {critical_file}")
+
+if not found_critical:
+    print("⚠️  WARNING: No critical personal files found! Family information may not be available.")
 
 def extract_text_from_pdf(pdf_path):
     """Extract text from PDF with OCR fallback for handwritten content"""
@@ -591,3 +612,40 @@ try:
     print(f"📈 Total vectors in index: {stats.total_vector_count}")
 except Exception as e:
     print(f"Error getting index stats: {e}")
+
+# Test personal data accessibility
+print(f"\n🔍 TESTING PERSONAL DATA ACCESS...")
+test_queries = ["family", "mother", "father", "parents", "Michael personality"]
+for test_query in test_queries:
+    try:
+        test_results = index.query(
+            vector=embed(test_query),
+            top_k=5,
+            include_metadata=True,
+            filter={"category": {"$in": ["personality_core", "profile_core", "personality"]}}
+        ).matches
+        
+        relevant_results = [r for r in test_results if r.score > 0.3]
+        print(f"Query '{test_query}': {len(relevant_results)} relevant results found")
+        
+        if relevant_results:
+            best_result = relevant_results[0]
+            source = best_result.metadata.get('source', 'unknown')
+            category = best_result.metadata.get('category', 'unknown')
+            score = best_result.score
+            print(f"  Best match: {source} (category: {category}, score: {score:.3f})")
+        else:
+            print(f"  ❌ No good matches found for '{test_query}'")
+    except Exception as e:
+        print(f"  Error testing '{test_query}': {e}")
+
+print(f"\n📋 PROCESSING SUMMARY:")
+personal_files = [f for f in processed_files if any(keyword in f.lower() for keyword in ['personality', 'profile', 'michael'])]
+print(f"Personal files processed: {len(personal_files)}")
+for pf in personal_files:
+    print(f"  ✅ {pf}")
+
+if not personal_files:
+    print("⚠️  WARNING: No personal files were processed! This explains why family information is missing.")
+    print("💡 Make sure MichaelPersonality.pdf and MichaelProfile.pdf are in docs/ or attached_assets/")
+    print("🔄 Re-run this script after adding the files.")
