@@ -1,4 +1,3 @@
-
 import os
 from typing import List, Dict
 from fastapi import FastAPI, HTTPException, Request, UploadFile, File
@@ -88,42 +87,49 @@ def fetch_memories(q: str, k: int = 10, category_filter: str = None) -> List[Dic
     """Enhanced memory retrieval with category filtering and better scoring"""
     try:
         logger.info(f"Searching for: '{q}' with category filter: {category_filter}")
-        
+
         filter_dict = {}
         if category_filter and category_filter != "all":
             filter_dict["category"] = category_filter
-            
+
         results = index.query(
             vector=embed(q), 
             top_k=k * 4,  # Get more results for better filtering
             include_metadata=True,
             filter=filter_dict
         ).matches
-        
+
         logger.info(f"Found {len(results)} raw results")
-        
-        # More lenient filtering for better recall
+
+        # Much more lenient filtering for better recall
         filtered_results = []
-        seen_sources = set()
-        
+        seen_content = set()
+
         for result in results:
-            # Lower thresholds for better recall
-            if result.score > 0.75:  # High confidence
-                filtered_results.append(result)
-                logger.info(f"High confidence match (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
-            elif result.score > 0.6:  # Medium confidence
-                source = result.metadata.get('source', '')
-                if source not in seen_sources or len(filtered_results) < 5:
+            # More relaxed thresholds to catch relevant content
+            content_preview = result.metadata.get('text', '')[:100]
+
+            if result.score > 0.3:  # Much lower threshold
+                # Avoid exact duplicates but allow similar content from different sources
+                if content_preview not in seen_content:
                     filtered_results.append(result)
-                    seen_sources.add(source)
-                    logger.info(f"Medium confidence match (score: {result.score:.3f}): {source}")
-            elif result.score > 0.4 and len(filtered_results) < 3:  # Low confidence but we need results
-                filtered_results.append(result)
-                logger.info(f"Low confidence match (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
-        
+                    seen_content.add(content_preview)
+                    logger.info(f"Match found (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
+
+                    # Stop when we have enough good results
+                    if len(filtered_results) >= k:
+                        break
+
+        # If still no results, take the best matches regardless of score
+        if not filtered_results and results:
+            logger.warning("No results above threshold, taking best matches")
+            filtered_results = results[:k]
+            for result in filtered_results:
+                logger.info(f"Best available match (score: {result.score:.3f}): {result.metadata.get('source', 'unknown')}")
+
         logger.info(f"Returning {len(filtered_results)} filtered results")
         return filtered_results[:k]
-        
+
     except Exception as e:
         logger.error(f"Memory fetch error: {e}")
         return []
@@ -140,15 +146,15 @@ def format_memory_context(memories: List[Dict]) -> str:
     for memory in memories:
         metadata = memory.metadata
         category = metadata.get('category', 'general')
-        
+
         if category not in categories:
             categories[category] = []
-        
+
         # Get more text for better context
         text_snippet = metadata.get('text', '')[:500]
         if len(metadata.get('text', '')) > 500:
             text_snippet += "..."
-            
+
         categories[category].append({
             'text': text_snippet,
             'source': os.path.basename(metadata.get('source', 'unknown')),
@@ -168,7 +174,7 @@ def format_memory_context(memories: List[Dict]) -> str:
         if category in categories and categories[category]:
             items = sorted(categories[category], key=lambda x: x['score'], reverse=True)[:3]
             context_parts.append(f"\n═══ {category.upper().replace('_', ' ')} INSIGHTS ═══")
-            
+
             for i, item in enumerate(items, 1):
                 relevance = "🔥 HIGHLY RELEVANT" if item['score'] > 0.85 else "📌 RELEVANT" if item['score'] > 0.75 else "💡 RELATED"
                 context_parts.append(f"\n{i}. {relevance} | From: {item['source']}")
@@ -186,7 +192,7 @@ def format_memory_context(memories: List[Dict]) -> str:
 async def chat(req: ChatRequest):
     try:
         logger.info(f"Chat request from {req.session_id}: {req.message[:100]}...")
-        
+
         # Enhanced memory retrieval
         memories = fetch_memories(req.message, k=12)
         memory_context = format_memory_context(memories)
@@ -243,17 +249,17 @@ Always ground your responses in actual information from his personal data when p
             temperature=0.7,
             max_tokens=800
         )
-        
+
         response_content = resp.choices[0].message.content
-        
+
         # Store conversation with better management
         conversation_memory[req.session_id].append({"role": "user", "content": req.message})
         conversation_memory[req.session_id].append({"role": "assistant", "content": response_content})
-        
+
         # Keep conversation memory manageable
         if len(conversation_memory[req.session_id]) > 24:
             conversation_memory[req.session_id] = conversation_memory[req.session_id][-20:]
-        
+
         return {"response": response_content}
     except Exception as e:
         logger.error(f"Chat error: {e}")
@@ -264,10 +270,10 @@ async def analyze_patterns(req: AnalysisRequest):
     """Advanced analysis of personal data patterns"""
     try:
         memories = fetch_memories(req.query, k=20, category_filter=req.category)
-        
+
         if not memories:
             return {"analysis": "No relevant data found for this query.", "insights": []}
-        
+
         # Organize by categories and time
         analysis_data = {}
         for memory in memories:
@@ -280,7 +286,7 @@ async def analyze_patterns(req: AnalysisRequest):
                 'score': memory.score,
                 'timestamp': memory.metadata.get('timestamp', '')
             })
-        
+
         # Generate insights using AI
         analysis_prompt = f"""Analyze Michael's personal data patterns based on this query: "{req.query}"
 
@@ -303,7 +309,7 @@ Be specific and reference the actual data when possible."""
             temperature=0.3,
             max_tokens=600
         )
-        
+
         return {
             "analysis": analysis_resp.choices[0].message.content,
             "categories_found": list(analysis_data.keys()),
@@ -326,10 +332,10 @@ async def upload_and_process(file: UploadFile = File(...)):
             content = await file.read()
             temp_file.write(content)
             temp_path = temp_file.name
-        
+
         text_content = ""
         file_type = file.filename.split('.')[-1].lower()
-        
+
         # Process based on file type
         if file_type == 'pdf':
             import pdfplumber
@@ -338,27 +344,27 @@ async def upload_and_process(file: UploadFile = File(...)):
                     page_text = page.extract_text()
                     if page_text:
                         text_content += page_text + "\n"
-        
+
         elif file_type in ['jpg', 'jpeg', 'png', 'tiff', 'bmp']:
             if ocr_reader:
                 results = ocr_reader.readtext(temp_path)
                 text_content = ' '.join([result[1] for result in results])
             else:
                 return {"error": "OCR not available for image processing"}
-        
+
         # Clean up temp file
         os.unlink(temp_path)
-        
+
         if not text_content.strip():
             return {"error": "No text could be extracted from the file"}
-        
+
         # Process and store in memory
         from scripts.boot_memory import categorize_content, chunk_text, clean_text
-        
+
         text_content = clean_text(text_content)
         category = categorize_content(text_content, file.filename)
         chunks = chunk_text(text_content)
-        
+
         vector_count = 0
         for i, chunk in enumerate(chunks):
             if chunk.strip():
@@ -376,14 +382,14 @@ async def upload_and_process(file: UploadFile = File(...)):
                     }
                     index.upsert([(vector_id, embedding, metadata)])
                     vector_count += 1
-        
+
         return {
             "message": f"Successfully processed {file.filename}",
             "category": category,
             "chunks_created": vector_count,
             "text_preview": text_content[:200] + "..." if len(text_content) > 200 else text_content
         }
-        
+
     except Exception as e:
         logger.error(f"Upload processing error: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing upload: {str(e)}")
@@ -397,7 +403,7 @@ async def api_status():
     try:
         # Check Pinecone connection and get detailed stats
         stats = index.describe_index_stats()
-        
+
         # Get category breakdown if possible
         try:
             sample_query = index.query(
@@ -411,7 +417,7 @@ async def api_status():
                 categories[cat] = categories.get(cat, 0) + 1
         except:
             categories = {}
-        
+
         return {
             "message": "AI Companion API is running",
             "total_memory_vectors": stats.total_vector_count,
@@ -445,19 +451,19 @@ async def debug_memory():
             top_k=20,
             include_metadata=True
         )
-        
+
         debug_data = []
         categories = {}
         sources = {}
-        
+
         for match in results.matches:
             metadata = match.metadata
             category = metadata.get('category', 'unknown')
             source = metadata.get('source', 'unknown')
-            
+
             categories[category] = categories.get(category, 0) + 1
             sources[source] = sources.get(source, 0) + 1
-            
+
             debug_data.append({
                 "score": match.score,
                 "source": source,
@@ -466,10 +472,10 @@ async def debug_memory():
                 "timestamp": metadata.get('timestamp', 'unknown'),
                 "file_type": metadata.get('file_type', 'unknown')
             })
-        
+
         # Get index stats
         stats = index.describe_index_stats()
-        
+
         return {
             "total_vectors": stats.total_vector_count,
             "categories_found": categories,
@@ -481,7 +487,7 @@ async def debug_memory():
                 "has_sources": sum(1 for d in debug_data if d['source'] != 'unknown')
             }
         }
-        
+
     except Exception as e:
         logger.error(f"Debug memory error: {e}")
         return {"error": str(e)}
@@ -509,13 +515,13 @@ async def google_callback(request: Request, code: str = None, state: str = None)
     try:
         if state != user_sessions.get('oauth_state'):
             raise HTTPException(status_code=400, detail="Invalid state parameter")
-        
+
         redirect_uri = str(request.url_for('google_callback')).replace('http://', 'https://')
         flow = calendar_manager.create_auth_flow(redirect_uri)
-        
+
         authorization_response = str(request.url).replace('http://', 'https://')
         flow.fetch_token(authorization_response=authorization_response)
-        
+
         credentials = flow.credentials
         user_sessions['google_credentials'] = {
             'token': credentials.token,
@@ -525,7 +531,7 @@ async def google_callback(request: Request, code: str = None, state: str = None)
             'client_secret': credentials.client_secret,
             'scopes': credentials.scopes
         }
-        
+
         return RedirectResponse("/", status_code=302)
     except Exception as e:
         logger.error(f"OAuth callback error: {e}")
@@ -536,7 +542,7 @@ async def get_upcoming_events():
     """Get upcoming calendar events"""
     if 'google_credentials' not in user_sessions:
         return {"events": [], "message": "Please connect your Google Calendar first", "auth_required": True}
-    
+
     try:
         service = calendar_manager.get_calendar_service(user_sessions['google_credentials'])
         events = calendar_manager.get_upcoming_events(service, max_results=10)
@@ -550,10 +556,10 @@ async def add_calendar_event(event_data: dict):
     """Add calendar events via Google Calendar API"""
     if 'google_credentials' not in user_sessions:
         return {"message": "Please connect your Google Calendar first", "auth_required": True}
-    
+
     try:
         service = calendar_manager.get_calendar_service(user_sessions['google_credentials'])
-        
+
         google_event = {
             'summary': event_data.get('title', 'New Event'),
             'description': event_data.get('description', ''),
@@ -566,10 +572,10 @@ async def add_calendar_event(event_data: dict):
                 'timeZone': 'America/New_York',
             },
         }
-        
+
         if event_data.get('location'):
             google_event['location'] = event_data['location']
-        
+
         event = calendar_manager.create_event(service, google_event)
         return {"message": "Event created successfully", "event_id": event.get('id') if event else None}
     except Exception as e:
@@ -582,7 +588,7 @@ async def add_quick_note(note: dict):
     try:
         note_text = note.get("text", "")
         category = note.get("category", "quick_notes")
-        
+
         vector_id = f"quick_note_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         metadata = {
             "text": note_text,
@@ -592,7 +598,7 @@ async def add_quick_note(note: dict):
             "file_type": "note"
         }
         index.upsert([(vector_id, embed(note_text), metadata)])
-        
+
         return {"message": "Note added successfully"}
     except Exception as e:
         logger.error(f"Add note error: {e}")
@@ -669,16 +675,16 @@ async def synthesize_speech(request: dict):
     try:
         text = request.get("text", "")
         voice = request.get("voice", "alloy")
-        
+
         if not text:
             raise HTTPException(status_code=400, detail="Text is required")
-        
+
         audio_content = voice_handler.generate_voice_response(text, voice)
-        
+
         # Return audio as base64 for web playback
         import base64
         audio_b64 = base64.b64encode(audio_content).decode()
-        
+
         return {
             "audio_data": audio_b64,
             "content_type": "audio/mpeg"
@@ -694,22 +700,22 @@ async def voice_chat(file: UploadFile = File(...), session_id: str = "default"):
         # Transcribe audio
         audio_content = await file.read()
         transcription_result = voice_handler.process_voice_message(audio_content)
-        
+
         if "error" in transcription_result:
             return transcription_result
-        
+
         transcribed_text = transcription_result["transcribed_text"]
-        
+
         # Process through chat system
         chat_request = ChatRequest(message=transcribed_text, session_id=session_id)
         chat_response = await chat(chat_request)
-        
+
         # Generate voice response
         audio_response = voice_handler.generate_voice_response(chat_response["response"])
-        
+
         import base64
         audio_b64 = base64.b64encode(audio_response).decode()
-        
+
         return {
             "transcribed_text": transcribed_text,
             "text_response": chat_response["response"],
@@ -727,12 +733,12 @@ async def smart_search(request: dict):
         query = request.get("query", "")
         category_filter = request.get("category")
         time_filter = request.get("time_period")  # e.g., "2024", "recent"
-        
+
         # Build dynamic filter
         filter_dict = {}
         if category_filter and category_filter != "all":
             filter_dict["category"] = category_filter
-        
+
         # Get more comprehensive results
         results = index.query(
             vector=embed(query),
@@ -740,7 +746,7 @@ async def smart_search(request: dict):
             include_metadata=True,
             filter=filter_dict if filter_dict else None
         )
-        
+
         # Process and rank results
         processed_results = []
         for result in results.matches:
@@ -753,7 +759,7 @@ async def smart_search(request: dict):
                     "timestamp": result.metadata.get("timestamp", ""),
                     "file_type": result.metadata.get("file_type", "")
                 })
-        
+
         return {
             "results": processed_results[:15],  # Top 15 results
             "total_found": len(processed_results),
@@ -780,7 +786,7 @@ async def add_daily_reflection(reflection: dict):
         text = reflection.get("text", "")
         mood = reflection.get("mood_score", 5)
         energy = reflection.get("energy_level", 5)
-        
+
         result = insights_manager.store_daily_reflection(text, mood, energy)
         return result
     except Exception as e:
@@ -812,10 +818,10 @@ async def get_youtube_data():
     """Get YouTube data with OAuth"""
     if 'google_credentials' not in user_sessions:
         return {"error": "Please connect your Google account first", "auth_required": True}
-    
+
     try:
         data = integrations.get_youtube_data(user_sessions['google_credentials'])
-        return data
+        return data```python
     except Exception as e:
         logger.error(f"YouTube integration error: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting YouTube data: {str(e)}")
@@ -825,7 +831,7 @@ async def get_gmail_data():
     """Get Gmail insights"""
     if 'google_credentials' not in user_sessions:
         return {"error": "Please connect your Google account first", "auth_required": True}
-    
+
     try:
         data = integrations.get_gmail_data(user_sessions['google_credentials'])
         return data
@@ -838,7 +844,7 @@ async def get_drive_data():
     """Get Google Drive insights"""
     if 'google_credentials' not in user_sessions:
         return {"error": "Please connect your Google account first", "auth_required": True}
-    
+
     try:
         data = integrations.get_drive_data(user_sessions['google_credentials'])
         return data
@@ -873,18 +879,18 @@ async def process_nas_file(request: dict):
         file_path = request.get("file_path")
         if not file_path:
             raise HTTPException(status_code=400, detail="file_path is required")
-        
+
         content = integrations.process_nas_file(file_path)
         if not content:
             return {"error": "Could not extract content from file"}
-        
+
         # Add to memory system
         from scripts.boot_memory import categorize_content, chunk_text, clean_text
-        
+
         content = clean_text(content)
         category = categorize_content(content, os.path.basename(file_path))
         chunks = chunk_text(content)
-        
+
         vector_count = 0
         for i, chunk in enumerate(chunks):
             if chunk.strip():
@@ -903,14 +909,14 @@ async def process_nas_file(request: dict):
                     }
                     index.upsert([(vector_id, embedding, metadata)])
                     vector_count += 1
-        
+
         return {
             "message": f"Successfully processed {os.path.basename(file_path)}",
             "category": category,
             "chunks_created": vector_count,
             "content_preview": content[:200] + "..." if len(content) > 200 else content
         }
-        
+
     except Exception as e:
         logger.error(f"NAS file processing error: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing NAS file: {str(e)}")
@@ -924,16 +930,16 @@ async def import_health_data(file: UploadFile = File(...)):
             content = await file.read()
             temp_file.write(content)
             temp_path = temp_file.name
-        
+
         # Parse health data
         health_data = integrations.parse_apple_health_export(temp_path)
-        
+
         # Clean up temp file
         os.unlink(temp_path)
-        
+
         if "error" in health_data:
             return health_data
-        
+
         # Store health insights in memory
         health_summary = f"""Health Data Summary:
 Steps: {len(health_data.get('steps', []))} records
@@ -942,7 +948,7 @@ Workouts: {len(health_data.get('workouts', []))} records
 Sleep: {len(health_data.get('sleep', []))} records
 Weight: {len(health_data.get('weight', []))} records
 """
-        
+
         vector_id = f"health_import_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         metadata = {
             "text": health_summary,
@@ -952,15 +958,15 @@ Weight: {len(health_data.get('weight', []))} records
             "file_type": "health_data",
             "data": json.dumps(health_data)
         }
-        
+
         index.upsert([(vector_id, embed(health_summary), metadata)])
-        
+
         return {
             "message": "Health data imported successfully",
             "summary": health_data,
             "records_processed": sum(len(health_data.get(key, [])) for key in health_data.keys())
         }
-        
+
     except Exception as e:
         logger.error(f"Health import error: {e}")
         raise HTTPException(status_code=500, detail=f"Error importing health data: {str(e)}")
